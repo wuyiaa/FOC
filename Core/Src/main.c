@@ -18,6 +18,9 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "adc.h"
+#include "dma.h"
+#include "tim.h"
 #include "usb_device.h"
 #include "gpio.h"
 
@@ -87,8 +90,13 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_USB_Device_Init();
+  MX_ADC1_Init();
+  MX_ADC2_Init();
+  MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
+  HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, GPIO_PIN_SET);
 
   /* USER CODE END 2 */
 
