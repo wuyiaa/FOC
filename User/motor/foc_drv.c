@@ -2,7 +2,6 @@
 
 #include <string.h>
 
-#define CURRENT_OFFSET_SAMPLE_COUNT  1000U
 
 pmsm_t pm;
 
@@ -15,7 +14,7 @@ void pmsm_board_init(void)
     pm.board.i_res = 0.005f;
     pm.board.i_op = 20.0f;
 
-    pm.board.i_ratio = pm.board.v_ref / (pm.board.v_adc* pm.board.i_res* pm.board.i_op);
+     pm.board.i_ratio = pm.board.v_ref / (pm.board.v_adc* pm.board.i_res* pm.board.i_op);
     pm.board.i_max = pm.board.v_adc * pm.board.i_ratio * 0.5f;
 //	  float ia_positive_max =
 //      (4095.0f - pm.adc.ia_off) * pm.board.i_ratio;
@@ -39,7 +38,7 @@ void foc_get_curr_off(void)
     float sum_c = 0.0f;
     uint32_t i;
 
-    for (i = 0U; i < CURRENT_OFFSET_SAMPLE_COUNT; i++)
+    for (i = 0U; i < 1000; i++)
     {
         HAL_Delay(1U);
         sum_a += (float)ADC1->JDR3;
@@ -50,6 +49,7 @@ void foc_get_curr_off(void)
     pm.adc.ia_off = sum_a * 0.001f;
     pm.adc.ib_off = sum_b * 0.001f;
     pm.adc.ic_off = sum_c * 0.001f;
+    pm.adc.offset_ready = 1U;
 }
 
 void foc_adc_sample(pmsm_t *pm)

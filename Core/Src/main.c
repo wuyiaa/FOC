@@ -98,6 +98,8 @@ int main(void)
   MX_ADC2_Init();
   MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
+  DWT_Init();
+
   HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, GPIO_PIN_SET);
 
   HAL_Delay(1000U);
@@ -113,7 +115,7 @@ int main(void)
     Error_Handler();
   }
 
-  /* TIM1 CH4 is an internal hardware trigger; no TIM1 CC interrupt is needed. */
+  /* TIM1 CH4 generates the ADC injected-conversion hardware trigger. */
   if (HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_4) != HAL_OK)
   {
     Error_Handler();
@@ -121,6 +123,9 @@ int main(void)
 
   /* Keep TIM1 CH1-CH3 disabled while measuring the zero-current offsets. */
   pmsm_init();
+
+  /* Measure one TIM1_CH4-to-ADC1 injected-sequence interval with DWT. */
+  foc_adc_time_measure_arm(&pm);
 
   /* USER CODE END 2 */
 

@@ -4,6 +4,34 @@
 #include "main.h"
 #include "adc.h"
 #include "tim.h"
+#include "dwt_time.h"
+
+/* TIM1 PWM and ADC current-sampling window, expressed in timer ticks. */
+#define PWM_PERIOD_TICKS                       4000U
+#define PWM_HALF_PERIOD_TICKS                  (PWM_PERIOD_TICKS >> 1U)
+#define ADC_SAMPLE_TOTAL_TICKS                  850U
+
+/* Current reconstruction modes selected at compile time. */
+#define CURRENT_RECONSTRUCTION_MAX_CURRENT        1U
+#define CURRENT_RECONSTRUCTION_MIN_WINDOW         2U
+
+#ifndef CURRENT_RECONSTRUCTION_MODE
+#define CURRENT_RECONSTRUCTION_MODE  CURRENT_RECONSTRUCTION_MAX_CURRENT
+#endif
+
+/* Fixed coefficients used by the amplitude-invariant Clarke transform. */
+#define ONE_BY_THREE                  0.333333333f
+#define TWO_BY_THREE                  0.666666667f
+#define ONE_BY_SQRT3                  0.577350269f
+#define TWO_BY_SQRT3                  1.154700538f
+
+typedef enum
+{
+    PMSM_PHASE_NONE = 0,
+    PMSM_PHASE_A,
+    PMSM_PHASE_B,
+    PMSM_PHASE_C
+} pmsm_phase_t;
 
 typedef struct
 {
@@ -14,6 +42,8 @@ typedef struct
     float ia_off;
     float ib_off;
     float ic_off;
+
+    volatile uint8_t offset_ready;
 } pmsm_adc_val_t;
 
 typedef struct
@@ -31,13 +61,42 @@ typedef struct
     float i_a;
     float i_b;
     float i_c;
+
+    float i_alpha;
+    float i_beta;
 } pmsm_foc_t;
+
+typedef struct
+{
+    uint16_t pwm_cmp_a;
+    uint16_t pwm_cmp_b;
+    uint16_t pwm_cmp_c;
+
+    uint16_t window_a;
+    uint16_t window_b;
+    uint16_t window_c;
+
+    uint8_t window_valid;
+    uint8_t full_clarke;
+
+    pmsm_phase_t reconstructed_phase;
+} pmsm_current_sample_t;
+
+typedef struct
+{
+    uint32_t time_last;
+    float sample_time_ms;
+    uint8_t active;
+    uint8_t done;
+} pmsm_adc_measure_t;
 
 typedef struct
 {
     pmsm_board_t board;
     pmsm_adc_val_t adc;
     pmsm_foc_t foc;
+    pmsm_current_sample_t current_sample;
+    pmsm_adc_measure_t adc_measure;
 } pmsm_t;
 
 extern pmsm_t pm;
@@ -46,5 +105,9 @@ void pmsm_board_init(void);
 void pmsm_init(void);
 void foc_get_curr_off(void);
 void foc_adc_sample(pmsm_t *pm);
+void foc_adc_time_measure_arm(pmsm_t *pm);
+void foc_current_sample_process(pmsm_t *pm);
+void clarke_transform(pmsm_foc_t *foc, uint8_t full_clarke);
+void foc_current_calc(pmsm_t *pm);
 
 #endif /* USER_MOTOR_COMMON_H */

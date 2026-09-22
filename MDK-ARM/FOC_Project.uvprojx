@@ -607,6 +607,21 @@
               <FilePath>../User/motor/foc_ctrl.c</FilePath>
             </File>
             <File>
+              <FileName>foc_calc.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../User/motor/foc_calc.c</FilePath>
+            </File>
+            <File>
+              <FileName>dwt_time.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../User/motor/dwt_time.c</FilePath>
+            </File>
+            <File>
+              <FileName>dwt_time.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../User/motor/dwt_time.h</FilePath>
+            </File>
+            <File>
               <FileName>common.h</FileName>
               <FileType>5</FileType>
               <FilePath>../User/motor/common.h</FilePath>
