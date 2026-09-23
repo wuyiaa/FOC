@@ -19,9 +19,23 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
             __HAL_TIM_DISABLE_IT(&htim1, TIM_IT_CC4);
         }
 
+        /* FOC uses one coherent copy of the most recently published angle. */
+        (void)as5047p_latest_get(&pm.encoder, &pm.encoder_foc_sample);
+
+        if (as5047p_protection_update(&pm.encoder,
+                                      &pm.encoder_foc_sample) != 0U)
+        {
+            /* Latch the encoder fault and immediately gate CH1-CH3/CH1N-CH3N. */
+            __HAL_TIM_MOE_DISABLE_UNCONDITIONALLY(&htim1);
+            HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, GPIO_PIN_SET);
+        }
+
         foc_adc_sample(&pm);
         foc_current_sample_process(&pm);
         foc_current_calc(&pm);
+
+        /* Start the next pipelined encoder DMA frame, then leave immediately. */
+        (void)as5047p_read_start_dma(&pm.encoder);
     }
 }
 
@@ -46,4 +60,3 @@ void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
         pm.adc_measure.active = 1U;
     }
 }//(__HAL_TIM_IS_TIM_COUNTING_DOWN(htim) == 0U)
-

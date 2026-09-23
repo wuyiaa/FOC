@@ -5,6 +5,7 @@
 #include "adc.h"
 #include "tim.h"
 #include "dwt_time.h"
+#include "as5047p.h"
 
 /* TIM1 PWM and ADC current-sampling window, expressed in timer ticks. */
 #define PWM_PERIOD_TICKS                       4000U
@@ -24,6 +25,7 @@
 #define TWO_BY_THREE                  0.666666667f
 #define ONE_BY_SQRT3                  0.577350269f
 #define TWO_BY_SQRT3                  1.154700538f
+#define TWO_PI                        6.283185307f
 
 typedef enum
 {
@@ -58,12 +60,23 @@ typedef struct
 
 typedef struct
 {
+    float lq;
+    float ld;
+    float rs;
+    uint8_t pn;
+} pmsm_motor_t;
+
+typedef struct
+{
     float i_a;
     float i_b;
     float i_c;
 
     float i_alpha;
     float i_beta;
+    float i_d;
+    float i_q;
+    float electrical_angle_rad;
 } pmsm_foc_t;
 
 typedef struct
@@ -93,6 +106,9 @@ typedef struct
 typedef struct
 {
     pmsm_board_t board;
+    pmsm_motor_t motor;
+    as5047p_t encoder;
+    as5047p_sample_t encoder_foc_sample;
     pmsm_adc_val_t adc;
     pmsm_foc_t foc;
     pmsm_current_sample_t current_sample;
@@ -102,12 +118,14 @@ typedef struct
 extern pmsm_t pm;
 
 void pmsm_board_init(void);
+void pmsm_motor_init(void);
 void pmsm_init(void);
 void foc_get_curr_off(void);
 void foc_adc_sample(pmsm_t *pm);
 void foc_adc_time_measure_arm(pmsm_t *pm);
 void foc_current_sample_process(pmsm_t *pm);
 void clarke_transform(pmsm_foc_t *foc, uint8_t full_clarke);
+void park_transform(pmsm_t *pm);
 void foc_current_calc(pmsm_t *pm);
 
 #endif /* USER_MOTOR_COMMON_H */

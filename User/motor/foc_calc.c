@@ -1,5 +1,7 @@
 #include "common.h"
 
+#include <math.h>
+
 #if ((CURRENT_RECONSTRUCTION_MODE != CURRENT_RECONSTRUCTION_MAX_CURRENT) && \
      (CURRENT_RECONSTRUCTION_MODE != CURRENT_RECONSTRUCTION_MIN_WINDOW))
 #error "Invalid CURRENT_RECONSTRUCTION_MODE"
@@ -151,7 +153,34 @@ void clarke_transform(pmsm_foc_t *foc, uint8_t full_clarke)
     }
 }
 
+void park_transform(pmsm_t *pm)
+{
+    uint32_t electrical_count;
+    float sin_theta;
+    float cos_theta;
+
+    if (pm->encoder_foc_sample.valid == 0U)
+    {
+        return;
+    }
+
+    electrical_count =
+        ((uint32_t)pm->encoder_foc_sample.raw * (uint32_t)pm->motor.pn) &
+        AS5047P_DATA_MASK;
+    pm->foc.electrical_angle_rad =
+        (float)electrical_count * AS5047P_RAD_PER_COUNT;
+
+    sin_theta = sinf(pm->foc.electrical_angle_rad);
+    cos_theta = cosf(pm->foc.electrical_angle_rad);
+
+    pm->foc.i_d = pm->foc.i_alpha * cos_theta
+                + pm->foc.i_beta * sin_theta;
+    pm->foc.i_q = pm->foc.i_beta * cos_theta
+                - pm->foc.i_alpha * sin_theta;
+}
+
 void foc_current_calc(pmsm_t *pm)
 {
     clarke_transform(&pm->foc, pm->current_sample.full_clarke);
+    park_transform(pm);
 }

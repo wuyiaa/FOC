@@ -24,10 +24,21 @@ void pmsm_board_init(void)
 
 }
 
+void pmsm_motor_init(void)
+{
+    /* Motor parameters use SI units: H, Ohm and pole pairs. */
+    pm.motor.lq = 0.005698f;
+    pm.motor.ld = 0.002846f;
+    pm.motor.rs = 6.617f;
+    pm.motor.pn = 11U;
+}
+
 void pmsm_init(void)
 {
     memset(&pm, 0, sizeof(pm));
     pmsm_board_init();
+    pmsm_motor_init();
+    as5047p_init(&pm.encoder);
     foc_get_curr_off();
 }
 

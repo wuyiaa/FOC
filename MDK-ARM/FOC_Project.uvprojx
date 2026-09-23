@@ -404,6 +404,11 @@
               <FilePath>../Core/Src/gpio.c</FilePath>
             </File>
             <File>
+              <FileName>spi.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/spi.c</FilePath>
+            </File>
+            <File>
               <FileName>adc.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Core/Src/adc.c</FilePath>
@@ -625,6 +630,16 @@
               <FileName>common.h</FileName>
               <FileType>5</FileType>
               <FilePath>../User/motor/common.h</FilePath>
+            </File>
+            <File>
+              <FileName>as5047p.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../User/motor/as5047p.c</FilePath>
+            </File>
+            <File>
+              <FileName>as5047p.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../User/motor/as5047p.h</FilePath>
             </File>
           </Files>
         </Group>
@@ -898,6 +913,16 @@
                   </Cads>
                 </FileArmAds>
               </FileOption>
+            </File>
+            <File>
+              <FileName>stm32g4xx_hal_spi.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Drivers/STM32G4xx_HAL_Driver/Src/stm32g4xx_hal_spi.c</FilePath>
+            </File>
+            <File>
+              <FileName>stm32g4xx_hal_spi_ex.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Drivers/STM32G4xx_HAL_Driver/Src/stm32g4xx_hal_spi_ex.c</FilePath>
             </File>
             <File>
               <FileName>stm32g4xx_hal_tim.c</FileName>

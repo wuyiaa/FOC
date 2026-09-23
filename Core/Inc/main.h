@@ -111,6 +111,14 @@ void Error_Handler(void);
 #define DIO_GPIO_Port GPIOA
 #define CLK_Pin GPIO_PIN_14
 #define CLK_GPIO_Port GPIOA
+#define CSN_Pin GPIO_PIN_2
+#define CSN_GPIO_Port GPIOD
+#define SCK_Pin GPIO_PIN_3
+#define SCK_GPIO_Port GPIOB
+#define MISO_Pin GPIO_PIN_4
+#define MISO_GPIO_Port GPIOB
+#define MOSI_Pin GPIO_PIN_5
+#define MOSI_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 
