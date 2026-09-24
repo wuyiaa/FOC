@@ -1,5 +1,17 @@
 #include "common.h"
 
+static uint8_t foc_current_trip_reached(const pmsm_foc_t *foc)
+{
+    const float current_limit = FOC_CURRENT_TRIP_LIMIT_A;
+
+    return (uint8_t)((foc->i_a >= current_limit) ||
+                     (foc->i_a <= -current_limit) ||
+                     (foc->i_b >= current_limit) ||
+                     (foc->i_b <= -current_limit) ||
+                     (foc->i_c >= current_limit) ||
+                     (foc->i_c <= -current_limit));
+}
+
 void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 {
     if (hadc->Instance == ADC1)
@@ -32,8 +44,21 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 
         foc_adc_sample(&pm);
         foc_current_sample_process(&pm);
-        foc_current_calc(&pm);
 
+        /* A fixed voltage command has no current regulator: latch a hard trip. */
+        if ((pm.foc.current_limit_fault != 0U) ||
+            (foc_current_trip_reached(&pm.foc) != 0U))
+        {
+            pm.foc.current_limit_fault = 1U;
+            foc_pwm_output_disable();
+            HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, GPIO_PIN_SET);
+            (void)as5047p_read_start_dma(&pm.encoder);
+            return;
+        }
+
+        foc_current_calc(&pm);
+        foc_voltage_calc(&pm, 24.0f, pm.svpwm.vref2_min);
+        foc_pwm_output_update(&pm);
         /* Start the next pipelined encoder DMA frame, then leave immediately. */
         (void)as5047p_read_start_dma(&pm.encoder);
     }

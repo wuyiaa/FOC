@@ -1,9 +1,78 @@
 #include "common.h"
+#include "encoder_zero_calibration.h"
 
 #include <string.h>
 
 
 pmsm_t pm;
+
+static uint8_t foc_pwm_channels_started;
+
+HAL_StatusTypeDef foc_pwm_output_enable(pmsm_t *pm)
+{
+    if ((pm == NULL) ||
+        (pm->encoder.fault != 0U) ||
+        (pm->foc.current_limit_fault != 0U))
+    {
+        return HAL_ERROR;
+    }
+
+    if (foc_pwm_channels_started != 0U)
+    {
+        __HAL_TIM_MOE_ENABLE(&htim1);
+        return HAL_OK;
+    }
+
+    /* Start from a balanced zero vector until the first valid FOC update. */
+    pm->svpwm.ccr1 = PWM_HALF_PERIOD_TICKS;
+    pm->svpwm.ccr2 = PWM_HALF_PERIOD_TICKS;
+    pm->svpwm.ccr3 = PWM_HALF_PERIOD_TICKS;
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, pm->svpwm.ccr1);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, pm->svpwm.ccr2);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, pm->svpwm.ccr3);
+
+    /* Latch all three new compare values on the same timer update event. */
+    __HAL_TIM_ENABLE_OCxPRELOAD(&htim1, TIM_CHANNEL_1);
+    __HAL_TIM_ENABLE_OCxPRELOAD(&htim1, TIM_CHANNEL_2);
+    __HAL_TIM_ENABLE_OCxPRELOAD(&htim1, TIM_CHANNEL_3);
+
+    if ((HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1) != HAL_OK) ||
+        (HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2) != HAL_OK) ||
+        (HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3) != HAL_OK) ||
+        (HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1) != HAL_OK) ||
+        (HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_2) != HAL_OK) ||
+        (HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_3) != HAL_OK))
+    {
+        /* Keep the gate driver outputs disabled if startup partially fails. */
+        __HAL_TIM_MOE_DISABLE_UNCONDITIONALLY(&htim1);
+        return HAL_ERROR;
+    }
+
+    foc_pwm_channels_started = 1U;
+    return HAL_OK;
+}
+
+void foc_pwm_output_disable(void)
+{
+    /* Keep TIM1 running: CH4 still generates the ADC injected trigger. */
+    __HAL_TIM_MOE_DISABLE_UNCONDITIONALLY(&htim1);
+}
+
+void foc_pwm_output_update(const pmsm_t *pm)
+{
+    if ((pm == NULL) ||
+        (foc_pwm_channels_started == 0U) ||
+        (pm->encoder.fault != 0U) ||
+        (pm->foc.current_limit_fault != 0U))
+    {
+        return;
+    }
+
+    /* CCR preload applies the three phase duties together at a timer update. */
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, pm->svpwm.ccr1);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, pm->svpwm.ccr2);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, pm->svpwm.ccr3);
+}
 
 void pmsm_board_init(void)
 {
@@ -36,6 +105,11 @@ void pmsm_motor_init(void)
 void pmsm_init(void)
 {
     memset(&pm, 0, sizeof(pm));
+#if (FOC_ENCODER_ZERO_CALIBRATION_MODE != 0U)
+    foc_encoder_zero_calibration_init();
+#endif
+    /* Restore the last calibrated offset for normal FOC operation. */
+    (void)encoder_zero_flash_load(&calibration.mechanical_zero_raw);
     pmsm_board_init();
     pmsm_motor_init();
     as5047p_init(&pm.encoder);

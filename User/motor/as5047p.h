@@ -5,6 +5,7 @@
 
 #define AS5047P_DATA_MASK              0x3FFFU
 #define AS5047P_RAD_PER_COUNT          0.000383495197f
+#define AS5047P_COUNT_PER_RAD          2607.59459f
 #define AS5047P_CPU_CYCLE_TO_US        0.00625f
 #define AS5047P_FAULT_LIMIT            5U
 

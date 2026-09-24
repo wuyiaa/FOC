@@ -29,6 +29,8 @@
 /* USER CODE BEGIN Includes */
 
 #include "common.h"
+#include "encoder_zero_calibration.h"
+#include "vofa.h"
 
 /* USER CODE END Includes */
 
@@ -126,8 +128,18 @@ int main(void)
   /* Keep TIM1 CH1-CH3 disabled while measuring the zero-current offsets. */
   pmsm_init();
 
+#if (FOC_PWM_OUTPUT_DEFAULT_ENABLED != 0U)
+  if (foc_pwm_output_enable(&pm) != HAL_OK)
+  {
+    Error_Handler();
+  }
+#endif
+
   /* Measure one TIM1_CH4-to-ADC1 injected-sequence interval with DWT. */
   foc_adc_time_measure_arm(&pm);
+
+  /* Initialize the non-blocking VOFA+ USB CDC stream. */
+  vofa_init();
 
   /* USER CODE END 2 */
 
@@ -136,6 +148,26 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
+
+    vofa_process();
+
+#if (FOC_ENCODER_ZERO_CALIBRATION_MODE != 0U)
+    /* Calibration completes in the ADC ISR; persist the result here in the
+       non-real-time foreground, with PWM already disabled. */
+    if ((calibration.done != 0U) &&
+        (calibration.flash_save_attempted == 0U))
+    {
+      calibration.flash_save_attempted = 1U;
+      if (encoder_zero_flash_save(calibration.mechanical_zero_raw) == HAL_OK)
+      {
+        calibration.flash_saved = 1U;
+      }
+      else
+      {
+        HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, GPIO_PIN_SET);
+      }
+    }
+#endif
 
     /* USER CODE BEGIN 3 */
   }

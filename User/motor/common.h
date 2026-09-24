@@ -7,6 +7,27 @@
 #include "dwt_time.h"
 #include "as5047p.h"
 
+/* Set to 1U to enable three-phase PWM automatically after initialization. */
+#ifndef FOC_PWM_OUTPUT_DEFAULT_ENABLED
+#define FOC_PWM_OUTPUT_DEFAULT_ENABLED       1U
+#endif
+
+#ifndef FOC_ENCODER_ZERO_CALIBRATION_MODE
+#define FOC_ENCODER_ZERO_CALIBRATION_MODE    0U
+#endif
+
+#define ENCODER_ZERO_ALIGN_TIME_S            1U
+#define ENCODER_ZERO_ALIGN_VOLTAGE_V         0.66f
+#define ENCODER_ZERO_SAMPLE_TIME_MS          100U
+
+#if ((FOC_ENCODER_ZERO_CALIBRATION_MODE != 0U) && \
+     (FOC_PWM_OUTPUT_DEFAULT_ENABLED == 0U))
+#error "Enable FOC PWM explicitly to run encoder zero calibration"
+#endif
+
+/* Latched phase-current trip threshold; measured phase current in amperes. */
+#define FOC_CURRENT_TRIP_LIMIT_A              0.500f
+
 /* TIM1 PWM and ADC current-sampling window, expressed in timer ticks. */
 #define PWM_PERIOD_TICKS                       4000U
 #define PWM_HALF_PERIOD_TICKS                  (PWM_PERIOD_TICKS >> 1U)
@@ -26,6 +47,11 @@
 #define ONE_BY_SQRT3                  0.577350269f
 #define TWO_BY_SQRT3                  1.154700538f
 #define TWO_PI                        6.283185307f
+#define SQRT3                         1.732050808f
+#define HALF_SQRT3                    0.866025404f
+
+/* TIM1: 160 MHz timer clock, center-aligned, ARR=4000 -> 20 kHz. */
+#define PWM_PERIOD_S                  0.00005f
 
 typedef enum
 {
@@ -76,8 +102,23 @@ typedef struct
     float i_beta;
     float i_d;
     float i_q;
+    float u_d;
+    float u_q;
+    float u_alpha;
+    float u_beta;
     float electrical_angle_rad;
+    volatile uint8_t current_limit_fault;
 } pmsm_foc_t;
+
+typedef struct
+{
+    uint16_t ccr1;
+    uint16_t ccr2;
+    uint16_t ccr3;
+    uint8_t sector;
+    float vref2;
+		float vref2_min;
+} pmsm_svpwm_t;
 
 typedef struct
 {
@@ -105,12 +146,32 @@ typedef struct
 
 typedef struct
 {
+    volatile uint32_t align_start_cycle;
+    volatile uint32_t sample_start_cycle;
+    volatile uint32_t last_sample_sequence;
+    volatile uint32_t sample_count;
+    volatile uint16_t last_raw;
+    volatile float sample_start_angle_rad;
+    volatile float unwrapped_angle_offset_rad;
+    volatile float angle_offset_sum_rad;
+    volatile uint16_t mechanical_zero_raw;
+    volatile float mechanical_zero_angle_rad;
+    volatile uint8_t started;
+    volatile uint8_t sampling;
+    volatile uint8_t done;
+    volatile uint8_t flash_save_attempted;
+    volatile uint8_t flash_saved;
+} pmsm_encoder_zero_cal_t;
+
+typedef struct
+{
     pmsm_board_t board;
     pmsm_motor_t motor;
     as5047p_t encoder;
     as5047p_sample_t encoder_foc_sample;
     pmsm_adc_val_t adc;
     pmsm_foc_t foc;
+    pmsm_svpwm_t svpwm;
     pmsm_current_sample_t current_sample;
     pmsm_adc_measure_t adc_measure;
 } pmsm_t;
@@ -127,5 +188,11 @@ void foc_current_sample_process(pmsm_t *pm);
 void clarke_transform(pmsm_foc_t *foc, uint8_t full_clarke);
 void park_transform(pmsm_t *pm);
 void foc_current_calc(pmsm_t *pm);
+void inverse_park_transform(pmsm_t *pm);
+void svpwm_calc(pmsm_t *pm, float v_dc, float v_min);
+void foc_voltage_calc(pmsm_t *pm, float v_dc, float v_min);
+HAL_StatusTypeDef foc_pwm_output_enable(pmsm_t *pm);
+void foc_pwm_output_disable(void);
+void foc_pwm_output_update(const pmsm_t *pm);
 
 #endif /* USER_MOTOR_COMMON_H */

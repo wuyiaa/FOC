@@ -1,4 +1,5 @@
 #include "common.h"
+#include "encoder_zero_calibration.h"
 
 #include <math.h>
 
@@ -153,25 +154,50 @@ void clarke_transform(pmsm_foc_t *foc, uint8_t full_clarke)
     }
 }
 
-void park_transform(pmsm_t *pm)
+static uint8_t foc_electrical_angle_get(pmsm_t *pm,
+                                       float *sin_theta,
+                                       float *cos_theta)
 {
-    uint32_t electrical_count;
-    float sin_theta;
-    float cos_theta;
-
     if (pm->encoder_foc_sample.valid == 0U)
     {
-        return;
+        return 0U;
     }
 
+
+#if (FOC_ENCODER_ZERO_CALIBRATION_MODE != 0U)
+    pm->foc.electrical_angle_rad = 0.0f;
+#else
+    uint32_t corrected_mechanical_count;
+    uint32_t electrical_count;
+
+    /* Keep the DMA-published raw angle untouched; compensate only for FOC. */
+    corrected_mechanical_count =
+        ((uint32_t)pm->encoder_foc_sample.raw +
+         (uint32_t)AS5047P_DATA_MASK + 1U -
+         (uint32_t)calibration.mechanical_zero_raw) &
+        (uint32_t)AS5047P_DATA_MASK;
     electrical_count =
-        ((uint32_t)pm->encoder_foc_sample.raw * (uint32_t)pm->motor.pn) &
+        (corrected_mechanical_count * (uint32_t)pm->motor.pn) &
         AS5047P_DATA_MASK;
     pm->foc.electrical_angle_rad =
         (float)electrical_count * AS5047P_RAD_PER_COUNT;
+#endif
 
-    sin_theta = sinf(pm->foc.electrical_angle_rad);
-    cos_theta = cosf(pm->foc.electrical_angle_rad);
+    *sin_theta = sinf(pm->foc.electrical_angle_rad);
+    *cos_theta = cosf(pm->foc.electrical_angle_rad);
+
+    return 1U;
+}
+
+void park_transform(pmsm_t *pm)
+{
+    float sin_theta;
+    float cos_theta;
+
+    if (foc_electrical_angle_get(pm, &sin_theta, &cos_theta) == 0U)
+    {
+        return;
+    }
 
     pm->foc.i_d = pm->foc.i_alpha * cos_theta
                 + pm->foc.i_beta * sin_theta;
@@ -183,4 +209,189 @@ void foc_current_calc(pmsm_t *pm)
 {
     clarke_transform(&pm->foc, pm->current_sample.full_clarke);
     park_transform(pm);
+}
+
+void inverse_park_transform(pmsm_t *pm)
+{
+    float sin_theta;
+    float cos_theta;
+
+    if (foc_electrical_angle_get(pm, &sin_theta, &cos_theta) == 0U)
+    {
+        return;
+    }
+
+    /* Inverse of the Park convention used above. */
+    pm->foc.u_alpha = pm->foc.u_d * cos_theta
+                    - pm->foc.u_q * sin_theta;
+    pm->foc.u_beta = pm->foc.u_d * sin_theta
+                   + pm->foc.u_q * cos_theta;
+}
+
+static uint16_t svpwm_ccr_from_time(float phase_time, float period)
+{
+    float duty;
+
+    duty = phase_time / period;
+    if (duty < 0.0f)
+    {
+        duty = 0.0f;
+    }
+    else if (duty > 1.0f)
+    {
+        duty = 1.0f;
+    }
+
+    return (uint16_t)(duty * (float)PWM_PERIOD_TICKS);
+}
+
+void svpwm_calc(pmsm_t *pm, float v_dc, float v_min)
+{
+    static uint8_t sector_last = 2U;
+    float u_alpha = pm->foc.u_alpha;
+    float u_beta = pm->foc.u_beta;
+    float period = PWM_PERIOD_S;
+    float vref2 = u_alpha * u_alpha + u_beta * u_beta;
+    float u1;
+    float u2;
+    float u3;
+    float x;
+    float y;
+    float z;
+    float k;
+    float t1 = 0.0f;
+    float t2 = 0.0f;
+    float t0;
+    float ta;
+    float tb;
+    float tc;
+    float scale;
+    uint8_t a = 0U;
+    uint8_t b = 0U;
+    uint8_t c = 0U;
+    uint8_t n;
+    uint8_t sector = 0U;
+
+    pm->svpwm.vref2 = vref2;
+
+    /* Preserve the Simulink invalid-input behavior: outputs remain zero. */
+    pm->svpwm.ccr1 = 0U;
+    pm->svpwm.ccr2 = 0U;
+    pm->svpwm.ccr3 = 0U;
+    pm->svpwm.sector = 0U;
+    if ((v_dc <= 1.0e-12f) || (period <= 1.0e-12f))
+    {
+        return;
+    }
+
+    if (vref2 < (v_min * v_min))
+    {
+        pm->svpwm.ccr1 = (uint16_t)(PWM_PERIOD_TICKS >> 1U);
+        pm->svpwm.ccr2 = (uint16_t)(PWM_PERIOD_TICKS >> 1U);
+        pm->svpwm.ccr3 = (uint16_t)(PWM_PERIOD_TICKS >> 1U);
+        pm->svpwm.sector = sector_last;
+        return;
+    }
+
+    /* Sector bits and lookup mapping are kept identical to the supplied model. */
+    u1 = u_beta;
+    u2 = HALF_SQRT3 * u_alpha - 0.5f * u_beta;
+    u3 = -HALF_SQRT3 * u_alpha - 0.5f * u_beta;
+    if (u1 > 0.0f)
+    {
+        a = 1U;
+    }
+    if (u2 > 0.0f)
+    {
+        b = 1U;
+    }
+    if (u3 > 0.0f)
+    {
+        c = 1U;
+    }
+    n = (uint8_t)(a + (uint8_t)(2U * b) + (uint8_t)(4U * c));
+
+    switch (n)
+    {
+        case 3U: sector = 1U; break;
+        case 1U: sector = 2U; break;
+        case 5U: sector = 3U; break;
+        case 4U: sector = 4U; break;
+        case 6U: sector = 5U; break;
+        case 2U: sector = 6U; break;
+        default: sector = 0U; break;
+    }
+
+    if (sector == 0U)
+    {
+        pm->svpwm.ccr1 = (uint16_t)(PWM_PERIOD_TICKS >> 1U);
+        pm->svpwm.ccr2 = (uint16_t)(PWM_PERIOD_TICKS >> 1U);
+        pm->svpwm.ccr3 = (uint16_t)(PWM_PERIOD_TICKS >> 1U);
+        return;
+    }
+
+    k = SQRT3 * period / v_dc;
+    x = k * u_beta;
+    y = k * (HALF_SQRT3 * u_alpha + 0.5f * u_beta);
+    z = k * (-HALF_SQRT3 * u_alpha + 0.5f * u_beta);
+
+    switch (sector)
+    {
+        case 1U: t1 = -z; t2 = x;  break;
+        case 2U: t1 = y;  t2 = z;  break;
+        case 3U: t1 = x;  t2 = -y; break;
+        case 4U: t1 = z;  t2 = -x; break;
+        case 5U: t1 = -y; t2 = -z; break;
+        case 6U: t1 = -x; t2 = y;  break;
+        default: break;
+    }
+
+    if (t1 < 0.0f)
+    {
+        t1 = 0.0f;
+    }
+    if (t2 < 0.0f)
+    {
+        t2 = 0.0f;
+    }
+
+    if ((t1 + t2) > period)
+    {
+        scale = period / (t1 + t2);
+        t1 *= scale;
+        t2 *= scale;
+    }
+
+    t0 = period - t1 - t2;
+    switch (sector)
+    {
+        case 1U: ta = t1 + t2 + t0 * 0.5f; tb = t2 + t0 * 0.5f; tc = t0 * 0.5f; break;
+        case 2U: ta = t1 + t0 * 0.5f; tb = t1 + t2 + t0 * 0.5f; tc = t0 * 0.5f; break;
+        case 3U: ta = t0 * 0.5f; tb = t1 + t2 + t0 * 0.5f; tc = t2 + t0 * 0.5f; break;
+        case 4U: ta = t0 * 0.5f; tb = t1 + t0 * 0.5f; tc = t1 + t2 + t0 * 0.5f; break;
+        case 5U: ta = t2 + t0 * 0.5f; tb = t0 * 0.5f; tc = t1 + t2 + t0 * 0.5f; break;
+        case 6U: ta = t1 + t2 + t0 * 0.5f; tb = t0 * 0.5f; tc = t1 + t0 * 0.5f; break;
+        default: ta = period * 0.5f; tb = period * 0.5f; tc = period * 0.5f; break;
+    }
+
+    pm->svpwm.ccr1 = svpwm_ccr_from_time(ta, period);
+    pm->svpwm.ccr2 = svpwm_ccr_from_time(tb, period);
+    pm->svpwm.ccr3 = svpwm_ccr_from_time(tc, period);
+    pm->svpwm.sector = sector;
+    sector_last = sector;
+}
+
+void foc_voltage_calc(pmsm_t *pm, float v_dc, float v_min)
+{
+#if (FOC_ENCODER_ZERO_CALIBRATION_MODE != 0U)
+    foc_encoder_zero_calibration_step(pm, v_dc, v_min);
+#else
+    if (pm->encoder_foc_sample.valid == 0U)
+    {
+        return;
+    }
+
+    inverse_park_transform(pm);
+    svpwm_calc(pm, v_dc, v_min);
+#endif
 }
