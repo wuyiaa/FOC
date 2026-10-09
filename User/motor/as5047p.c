@@ -7,7 +7,11 @@
 #define AS5047P_READ_BIT               0x4000U
 #define AS5047P_PARITY_BIT             0x8000U
 #define AS5047P_ERROR_BIT              0x4000U
+#define AS5047P_ERRFL_REG              0x0001U
 #define AS5047P_ANGLECOM_REG           0x3FFFU
+#define AS5047P_ERRFL_PARERR_BIT       0x0004U
+#define AS5047P_ERRFL_INVCOMM_BIT      0x0002U
+#define AS5047P_ERRFL_FRERR_BIT        0x0001U
 
 static as5047p_t *as5047p_active_encoder;
 
@@ -80,6 +84,17 @@ void as5047p_init(as5047p_t *encoder)
     encoder->angle_sample_time_us = 0.0f;
     encoder->sequence_last = 0U;
     encoder->consecutive_error_count = 0U;
+    encoder->errfl_response_word = 0U;
+    encoder->errfl_status = 0U;
+    encoder->errfl_read_count = 0U;
+    encoder->errfl_valid = 0U;
+    encoder->errfl_parity_error = 0U;
+    encoder->errfl_invalid_command = 0U;
+    encoder->errfl_frame_error = 0U;
+    encoder->errfl_read_pending = 0U;
+    encoder->errfl_read_in_progress = 0U;
+    encoder->dma_tx_is_errfl = 0U;
+    encoder->response_is_errfl_pending = 0U;
     encoder->fault = 0U;
     as5047p_active_encoder = NULL;
     HAL_GPIO_WritePin(CSN_GPIO_Port, CSN_Pin, GPIO_PIN_SET);
@@ -88,6 +103,7 @@ void as5047p_init(as5047p_t *encoder)
 HAL_StatusTypeDef as5047p_read_start_dma(as5047p_t *encoder)
 {
     HAL_StatusTypeDef status;
+    uint8_t tx_is_errfl;
 
     if (encoder == NULL)
     {
@@ -101,8 +117,9 @@ HAL_StatusTypeDef as5047p_read_start_dma(as5047p_t *encoder)
         return HAL_BUSY;
     }
 
-    encoder->dma_tx_word =
-        as5047p_make_read_command(AS5047P_ANGLECOM_REG);
+    tx_is_errfl = encoder->errfl_read_pending;
+    encoder->dma_tx_word = as5047p_make_read_command(
+        (tx_is_errfl != 0U) ? AS5047P_ERRFL_REG : AS5047P_ANGLECOM_REG);
     encoder->dma_rx_word = 0U;
     encoder->dma_state = AS5047P_DMA_ACTIVE;
     as5047p_active_encoder = encoder;
@@ -129,6 +146,16 @@ HAL_StatusTypeDef as5047p_read_start_dma(as5047p_t *encoder)
             encoder->dma_error_count++;
             encoder->pipeline_primed = 0U;
             encoder->angle_request_cycle = 0U;
+            encoder->response_is_errfl_pending = 0U;
+        }
+    }
+    else
+    {
+        encoder->dma_tx_is_errfl = tx_is_errfl;
+        if (tx_is_errfl != 0U)
+        {
+            encoder->errfl_read_pending = 0U;
+            encoder->errfl_read_in_progress = 1U;
         }
     }
 
@@ -181,7 +208,7 @@ uint8_t as5047p_protection_update(as5047p_t *encoder,
         encoder->consecutive_error_count = 0U;
         return 0U;
     }
-
+//encoder->consecutive_error_count++;
     if (encoder->consecutive_error_count < AS5047P_FAULT_LIMIT)
     {
         encoder->consecutive_error_count++;
@@ -201,6 +228,7 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
     uint32_t transfer_end_cycle = DWT->CYCCNT;
     uint32_t angle_sample_cycles;
     uint16_t response;
+    uint8_t response_is_errfl;
 
     if ((hspi->Instance != SPI1) || (encoder == NULL))
     {
@@ -224,16 +252,49 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
     as5047p_transaction_end(encoder);
 
     /*
-     * One-frame continuous pipeline:
-     * every FOC period sends an ANGLECOM read command. Its RX word is the
-     * response to the previous period's command, while the transmitted word
-     * requests the next sample. Therefore only the first completed frame is
-     * discarded; each later frame can publish one checked angle. CS remains
-     * high between control periods, so no delay or polling is required.
+     * One-frame continuous pipeline: normally each FOC period sends ANGLECOM.
+     * After EF is observed, one ERRFL read is inserted. RX always belongs to
+     * the preceding transaction, so only the first completed frame is dropped.
+     * CS remains high between periods; no delay or polling is used.
      */
     if (encoder->pipeline_primed == 0U)
     {
         encoder->pipeline_primed = 1U;
+        encoder->response_is_errfl_pending = encoder->dma_tx_is_errfl;
+        encoder->angle_request_cycle = encoder->transfer_start_cycle;
+        return;
+    }
+
+    /* SPI is pipelined: RX is the response to the preceding transaction. */
+    response_is_errfl = encoder->response_is_errfl_pending;
+    encoder->response_is_errfl_pending = encoder->dma_tx_is_errfl;
+
+    if (response_is_errfl != 0U)
+    {
+        /* Capture and decode ERRFL before normal EF handling discards the frame. */
+        encoder->errfl_response_word = response;
+        encoder->errfl_read_count++;
+
+        if (as5047p_parity_is_odd(response) != 0U)
+        {
+            encoder->parity_error_count++;
+            encoder->errfl_valid = 0U;
+            encoder->errfl_read_in_progress = 0U;
+            encoder->angle_request_cycle = encoder->transfer_start_cycle;
+            return;
+        }
+
+        encoder->errfl_status = response & AS5047P_DATA_MASK;
+        encoder->errfl_parity_error =
+            (uint8_t)((encoder->errfl_status & AS5047P_ERRFL_PARERR_BIT) != 0U);
+        encoder->errfl_invalid_command =
+            (uint8_t)((encoder->errfl_status & AS5047P_ERRFL_INVCOMM_BIT) != 0U);
+        encoder->errfl_frame_error =
+            (uint8_t)((encoder->errfl_status & AS5047P_ERRFL_FRERR_BIT) != 0U);
+        encoder->errfl_valid = 1U;
+        encoder->errfl_read_in_progress = 0U;
+
+        /* The current transaction sent ANGLECOM; restart its timing window. */
         encoder->angle_request_cycle = encoder->transfer_start_cycle;
         return;
     }
@@ -252,6 +313,12 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
     if ((response & AS5047P_ERROR_BIT) != 0U)
     {
         encoder->sensor_error_count++;
+        if ((encoder->errfl_read_pending == 0U) &&
+            (encoder->errfl_read_in_progress == 0U))
+        {
+            encoder->errfl_valid = 0U;
+            encoder->errfl_read_pending = 1U;
+        }
         return;
     }
 
@@ -271,7 +338,13 @@ void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi)
     }
 
     encoder->dma_error_count++;
+    if (encoder->errfl_read_in_progress != 0U)
+    {
+        encoder->errfl_read_pending = 1U;
+        encoder->errfl_read_in_progress = 0U;
+    }
     encoder->pipeline_primed = 0U;
+    encoder->response_is_errfl_pending = 0U;
     encoder->angle_request_cycle = 0U;
     as5047p_transaction_end(encoder);
 }

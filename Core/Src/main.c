@@ -105,7 +105,7 @@ int main(void)
   DWT_Init();
 
   HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, GPIO_PIN_SET);
-
+//led3-b led2-y led1-g
   HAL_Delay(1000U);
 
   /* Calibrate and arm ADC1 before TIM1 starts generating CC4 events. */

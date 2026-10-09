@@ -70,8 +70,8 @@ void foc_pwm_output_update(const pmsm_t *pm)
 
     /* CCR preload applies the three phase duties together at a timer update. */
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, pm->svpwm.ccr1);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, pm->svpwm.ccr2);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, pm->svpwm.ccr3);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, pm->svpwm.ccr3);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, pm->svpwm.ccr2);
 }
 
 void pmsm_board_init(void)
@@ -112,6 +112,7 @@ void pmsm_init(void)
     (void)encoder_zero_flash_load(&calibration.mechanical_zero_raw);
     pmsm_board_init();
     pmsm_motor_init();
+    foc_current_pid_init();
     as5047p_init(&pm.encoder);
     foc_get_curr_off();
 }

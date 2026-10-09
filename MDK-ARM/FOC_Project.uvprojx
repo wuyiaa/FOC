@@ -617,6 +617,16 @@
               <FilePath>../User/motor/foc_calc.c</FilePath>
             </File>
             <File>
+              <FileName>pid.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../User/motor/pid.c</FilePath>
+            </File>
+            <File>
+              <FileName>pid.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../User/motor/pid.h</FilePath>
+            </File>
+            <File>
               <FileName>encoder_zero_calibration.c</FileName>
               <FileType>1</FileType>
               <FilePath>../User/motor/encoder_zero_calibration.c</FilePath>

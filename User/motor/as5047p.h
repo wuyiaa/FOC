@@ -45,6 +45,17 @@ typedef struct
     volatile uint32_t dma_error_count;
     volatile uint32_t parity_error_count;
     volatile uint32_t sensor_error_count;
+    volatile uint16_t errfl_response_word;
+    volatile uint16_t errfl_status;
+    volatile uint32_t errfl_read_count;
+    volatile uint8_t errfl_valid;
+    volatile uint8_t errfl_parity_error;
+    volatile uint8_t errfl_invalid_command;
+    volatile uint8_t errfl_frame_error;
+    volatile uint8_t errfl_read_pending;
+    volatile uint8_t errfl_read_in_progress;
+    volatile uint8_t dma_tx_is_errfl;
+    volatile uint8_t response_is_errfl_pending;
 
     uint32_t sequence_last;
     volatile uint8_t consecutive_error_count;

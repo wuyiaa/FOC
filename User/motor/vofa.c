@@ -36,31 +36,45 @@ static uint16_t vofa_packet_build(void)
 {
     const float vofa_values[] =
     {
-//        pm.foc.i_a,                  /* CH0: phase A current (A) */
-//        pm.foc.i_b,                  /* CH1: phase B current (A) */
-//        pm.foc.i_c,                  /* CH2: phase C current (A) */
-//        pm.foc.i_d,                  /* CH3: d-axis current (A) */
-//        pm.foc.i_q,                  /* CH4: q-axis current (A) */
+        pm.foc.i_a,                  /* CH0: phase A current (A) */
+        pm.foc.i_b,                  /* CH1: phase B current (A) */
+        pm.foc.i_c,                  /* CH2: phase C current (A) */
+//        pm.foc.u_alpha,                  /* CH3: d-axis current (A) */
+//        pm.foc.u_beta,                  /* CH4: q-axis current (A) */
+//			pm.foc.i_a_ref,                  /* CH0: phase A current (A) */
+//        pm.foc.i_b_ref,                  /* CH1: phase B current (A) */
+//        pm.foc.i_c_ref,  
+			pm.foc.i_q,
+			pm.foc.i_d,
+			pm.foc.i_q_ref,
+			pm.foc.i_d_ref,
+			
+//			(float)ADC1->JDR1,
+//				(float)ADC1->JDR2,
+//					(float)ADC1->JDR3,
+//						pm.adc.ia_off,
+//					pm.adc.ib_off,
+//					pm.adc.ic_off
 //        pm.foc.electrical_angle_rad, /* CH5: electrical angle (rad) */
 //        pm.foc.u_d,                  /* CH6: d-axis voltage command (V) */
 //        pm.foc.u_q,                  /* CH7: q-axis voltage command (V) */
 //        pm.foc.u_alpha,              /* CH8: alpha voltage command (V) */
 //        pm.foc.u_beta,               /* CH9: beta voltage command (V) */
-//        (float)pm.svpwm.ccr1,        /* CH10: phase A PWM compare */
-//        (float)pm.svpwm.ccr2,        /* CH11: phase B PWM compare */
-//        (float)pm.svpwm.ccr3,         /* CH12: phase C PWM compare */
-			
-			
+        (float)pm.svpwm.ccr1,        /* CH10: phase A PWM compare */
+        (float)pm.svpwm.ccr2,        /* CH11: phase B PWM compare */
+        (float)pm.svpwm.ccr3,         /* CH12: phase C PWM compare */
+//			
+				pm.foc.mechanical_angle_rad,
 				pm.foc.electrical_angle_rad,
 			
-				/*У׼*/
-				(float)pm.encoder_foc_sample.raw,
-				(float)calibration.sampling,
-				(float)calibration.done,
-				(float)calibration.sample_count,
-				(float)calibration.mechanical_zero_raw
-					
-//					(float)calibration.mechanical_zero_angle_rad
+			
+//				/*У׼*/
+//				(float)pm.encoder_foc_sample.raw,
+//				(float)calibration.sampling,
+//				(float)calibration.done,
+//				(float)calibration.sample_count,
+//				(float)calibration.mechanical_zero_raw
+//				(float)calibration.mechanical_zero_angle_rad
     };
     uint16_t channel_count;
     uint16_t i;

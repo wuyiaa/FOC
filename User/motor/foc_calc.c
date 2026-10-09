@@ -154,6 +154,14 @@ void clarke_transform(pmsm_foc_t *foc, uint8_t full_clarke)
     }
 }
 
+void inverse_clarke_transform(pmsm_foc_t *foc)
+{
+    foc->i_a_ref = foc->i_alpha;
+    foc->i_b_ref = -0.5f * foc->i_alpha + HALF_SQRT3 * foc->i_beta;
+    foc->i_c_ref = -0.5f * foc->i_alpha - HALF_SQRT3 * foc->i_beta;
+}
+
+float theta_e;
 static uint8_t foc_electrical_angle_get(pmsm_t *pm,
                                        float *sin_theta,
                                        float *cos_theta)
@@ -179,10 +187,14 @@ static uint8_t foc_electrical_angle_get(pmsm_t *pm,
     electrical_count =
         (corrected_mechanical_count * (uint32_t)pm->motor.pn) &
         AS5047P_DATA_MASK;
+		
+		pm->foc.mechanical_angle_rad =
+        (float)corrected_mechanical_count * AS5047P_RAD_PER_COUNT;
     pm->foc.electrical_angle_rad =
         (float)electrical_count * AS5047P_RAD_PER_COUNT;
 #endif
-
+//theta_e +=0.00005*10;
+//pm->foc.electrical_angle_rad=theta_e;
     *sin_theta = sinf(pm->foc.electrical_angle_rad);
     *cos_theta = cosf(pm->foc.electrical_angle_rad);
 
@@ -221,6 +233,9 @@ void inverse_park_transform(pmsm_t *pm)
         return;
     }
 
+//		pm->foc.u_d = 0;
+//		pm->foc.u_q = 0.66;
+		
     /* Inverse of the Park convention used above. */
     pm->foc.u_alpha = pm->foc.u_d * cos_theta
                     - pm->foc.u_q * sin_theta;
@@ -392,6 +407,7 @@ void foc_voltage_calc(pmsm_t *pm, float v_dc, float v_min)
     }
 
     inverse_park_transform(pm);
+		inverse_clarke_transform(&pm->foc);
     svpwm_calc(pm, v_dc, v_min);
 #endif
 }

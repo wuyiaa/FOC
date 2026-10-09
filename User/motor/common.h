@@ -26,7 +26,7 @@
 #endif
 
 /* Latched phase-current trip threshold; measured phase current in amperes. */
-#define FOC_CURRENT_TRIP_LIMIT_A              0.500f
+#define FOC_CURRENT_TRIP_LIMIT_A              20.000f
 
 /* TIM1 PWM and ADC current-sampling window, expressed in timer ticks. */
 #define PWM_PERIOD_TICKS                       4000U
@@ -97,9 +97,15 @@ typedef struct
     float i_a;
     float i_b;
     float i_c;
+	
+		float i_a_ref;
+    float i_b_ref;
+    float i_c_ref;
 
     float i_alpha;
     float i_beta;
+    float i_d_ref;
+    float i_q_ref;
     float i_d;
     float i_q;
     float u_d;
@@ -107,6 +113,7 @@ typedef struct
     float u_alpha;
     float u_beta;
     float electrical_angle_rad;
+	  float mechanical_angle_rad;
     volatile uint8_t current_limit_fault;
 } pmsm_foc_t;
 
@@ -186,8 +193,11 @@ void foc_adc_sample(pmsm_t *pm);
 void foc_adc_time_measure_arm(pmsm_t *pm);
 void foc_current_sample_process(pmsm_t *pm);
 void clarke_transform(pmsm_foc_t *foc, uint8_t full_clarke);
+void inverse_clarke_transform(pmsm_foc_t *foc);
 void park_transform(pmsm_t *pm);
 void foc_current_calc(pmsm_t *pm);
+void foc_current_pid_init(void);
+void foc_current_pid_update(pmsm_t *pm, float dt);
 void inverse_park_transform(pmsm_t *pm);
 void svpwm_calc(pmsm_t *pm, float v_dc, float v_min);
 void foc_voltage_calc(pmsm_t *pm, float v_dc, float v_min);
