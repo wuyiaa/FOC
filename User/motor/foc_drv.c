@@ -58,6 +58,14 @@ void foc_pwm_output_disable(void)
     __HAL_TIM_MOE_DISABLE_UNCONDITIONALLY(&htim1);
 }
 
+uint8_t foc_pwm_output_is_enabled(void)
+{
+    /* Starting CH4 for ADC triggering also sets MOE in HAL, even before
+       the motor PWM channels CH1-CH3 have been started. */
+    return (uint8_t)((foc_pwm_channels_started != 0U) &&
+                     ((htim1.Instance->BDTR & TIM_BDTR_MOE) != 0U));
+}
+
 void foc_pwm_output_update(const pmsm_t *pm)
 {
     if ((pm == NULL) ||
@@ -96,10 +104,10 @@ void pmsm_board_init(void)
 void pmsm_motor_init(void)
 {
     /* Motor parameters use SI units: H, Ohm and pole pairs. */
-    pm.motor.lq = 0.005698f;
-    pm.motor.ld = 0.002846f;
-    pm.motor.rs = 6.617f;
-    pm.motor.pn = 11U;
+    pm.motor.lq = FOC_MOTOR_LQ_H;
+    pm.motor.ld = FOC_MOTOR_LD_H;
+    pm.motor.rs = FOC_MOTOR_RS_OHM;
+    pm.motor.pn = FOC_MOTOR_POLE_PAIRS;
 }
 
 void pmsm_init(void)

@@ -192,6 +192,7 @@ static uint8_t foc_electrical_angle_get(pmsm_t *pm,
         (float)corrected_mechanical_count * AS5047P_RAD_PER_COUNT;
     pm->foc.electrical_angle_rad =
         (float)electrical_count * AS5047P_RAD_PER_COUNT;
+						
 #endif
 //theta_e +=0.00005*10;
 //pm->foc.electrical_angle_rad=theta_e;

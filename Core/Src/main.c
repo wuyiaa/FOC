@@ -30,6 +30,7 @@
 
 #include "common.h"
 #include "encoder_zero_calibration.h"
+#include "key_control.h"
 #include "vofa.h"
 
 /* USER CODE END Includes */
@@ -41,7 +42,6 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -63,7 +63,6 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
 /* USER CODE END 0 */
 
 /**
@@ -150,6 +149,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     vofa_process();
+    key_control_process();
 
 #if (FOC_ENCODER_ZERO_CALIBRATION_MODE != 0U)
     /* Calibration completes in the ADC ISR; persist the result here in the

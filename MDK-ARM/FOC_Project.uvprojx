@@ -339,7 +339,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32G474xx</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../USB_Device/App;../USB_Device/Target;../User/motor;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Middlewares/ST/STM32_USB_Device_Library/Core/Inc;../Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Inc;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include</IncludePath>
+              <IncludePath>../Core/Inc;../USB_Device/App;../USB_Device/Target;../User/motor;../User/app;../User/bsp;../Drivers/STM32G4xx_HAL_Driver/Inc;../Drivers/STM32G4xx_HAL_Driver/Inc/Legacy;../Middlewares/ST/STM32_USB_Device_Library/Core/Inc;../Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Inc;../Drivers/CMSIS/Device/ST/STM32G4xx/Include;../Drivers/CMSIS/Include</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -599,6 +599,56 @@
           </Files>
         </Group>
         <Group>
+          <GroupName>User/app</GroupName>
+          <Files>
+            <File>
+              <FileName>key_control.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../User/app/key_control.c</FilePath>
+            </File>
+            <File>
+              <FileName>key_control.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../User/app/key_control.h</FilePath>
+            </File>
+            <File>
+              <FileName>vofa.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../User/app/vofa.c</FilePath>
+            </File>
+            <File>
+              <FileName>vofa.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../User/app/vofa.h</FilePath>
+            </File>
+            <File>
+              <FileName>as5047p.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../User/app/as5047p.c</FilePath>
+            </File>
+            <File>
+              <FileName>as5047p.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../User/app/as5047p.h</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>User/bsp</GroupName>
+          <Files>
+            <File>
+              <FileName>dwt_time.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../User/bsp/dwt_time.c</FilePath>
+            </File>
+            <File>
+              <FileName>dwt_time.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../User/bsp/dwt_time.h</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
           <GroupName>User/motor</GroupName>
           <Files>
             <File>
@@ -637,39 +687,24 @@
               <FilePath>../User/motor/encoder_zero_calibration.h</FilePath>
             </File>
             <File>
-              <FileName>vofa.c</FileName>
+              <FileName>motor_speed.c</FileName>
               <FileType>1</FileType>
-              <FilePath>../User/motor/vofa.c</FilePath>
+              <FilePath>../User/motor/motor_speed.c</FilePath>
             </File>
             <File>
-              <FileName>vofa.h</FileName>
+              <FileName>motor_speed.h</FileName>
               <FileType>5</FileType>
-              <FilePath>../User/motor/vofa.h</FilePath>
+              <FilePath>../User/motor/motor_speed.h</FilePath>
             </File>
             <File>
-              <FileName>dwt_time.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../User/motor/dwt_time.c</FilePath>
-            </File>
-            <File>
-              <FileName>dwt_time.h</FileName>
+              <FileName>motor_config.h</FileName>
               <FileType>5</FileType>
-              <FilePath>../User/motor/dwt_time.h</FilePath>
+              <FilePath>../User/motor/motor_config.h</FilePath>
             </File>
             <File>
               <FileName>common.h</FileName>
               <FileType>5</FileType>
               <FilePath>../User/motor/common.h</FilePath>
-            </File>
-            <File>
-              <FileName>as5047p.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../User/motor/as5047p.c</FilePath>
-            </File>
-            <File>
-              <FileName>as5047p.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>../User/motor/as5047p.h</FilePath>
             </File>
           </Files>
         </Group>

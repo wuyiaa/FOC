@@ -1,5 +1,5 @@
-#ifndef USER_MOTOR_DWT_TIME_H
-#define USER_MOTOR_DWT_TIME_H
+#ifndef USER_BSP_DWT_TIME_H
+#define USER_BSP_DWT_TIME_H
 
 #include <stdint.h>
 
@@ -9,4 +9,4 @@ void DWT_Init(void);
 uint32_t DWT_GetElapsedCycles(uint32_t start_cycle);
 float DWT_GetDeltaT(uint32_t *cnt_last);
 
-#endif /* USER_MOTOR_DWT_TIME_H */
+#endif /* USER_BSP_DWT_TIME_H */

@@ -85,6 +85,8 @@ void Error_Handler(void);
 #define ADSPE_GPIO_Port GPIOC
 #define VBUS_Pin GPIO_PIN_5
 #define VBUS_GPIO_Port GPIOC
+#define KEY1_Pin GPIO_PIN_9
+#define KEY1_GPIO_Port GPIOC
 #define NTC1_Pin GPIO_PIN_1
 #define NTC1_GPIO_Port GPIOB
 #define NTC2_Pin GPIO_PIN_2

@@ -29,7 +29,6 @@
 /* Configure GPIO                                                             */
 /*----------------------------------------------------------------------------*/
 /* USER CODE BEGIN 1 */
-
 /* USER CODE END 1 */
 
 /** Configure pins as
@@ -72,6 +71,12 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   GPIO_InitStruct.Alternate = GPIO_AF1_TIM2;
   HAL_GPIO_Init(RGB_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : KEY1_Pin */
+  GPIO_InitStruct.Pin = KEY1_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(KEY1_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : CSN_Pin */
   GPIO_InitStruct.Pin = CSN_Pin;

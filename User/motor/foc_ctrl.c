@@ -33,6 +33,8 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 
         /* FOC uses one coherent copy of the most recently published angle. */
         (void)as5047p_latest_get(&pm.encoder, &pm.encoder_foc_sample);
+        motor_speed_update(&pm.speed, &pm.encoder_foc_sample,
+                           pm.motor.pn, DWT->CYCCNT);
 
 //        if (as5047p_protection_update(&pm.encoder,
 //                                      &pm.encoder_foc_sample) != 0U)
@@ -57,12 +59,12 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
         }
 
         foc_current_calc(&pm);
-//				pm.foc.i_d_ref = 0.0f;
-//				pm.foc.i_q_ref = 2.0f;
+				pm.foc.i_d_ref = 0;
+				pm.foc.i_q_ref = 0.7f;
         foc_current_pid_update(&pm, PWM_PERIOD_S);
-				pm.foc.u_d = 0;
-				pm.foc.u_q = 5;
-        foc_voltage_calc(&pm, 24.0f, pm.svpwm.vref2_min);
+//				pm.foc.u_d = 0;
+//				pm.foc.u_q = 5;
+        foc_voltage_calc(&pm, FOC_DC_BUS_VOLTAGE_V, pm.svpwm.vref2_min);
         foc_pwm_output_update(&pm);
         /* Start the next pipelined encoder DMA frame, then leave immediately. */
         (void)as5047p_read_start_dma(&pm.encoder);

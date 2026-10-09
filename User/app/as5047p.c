@@ -47,12 +47,15 @@ static void as5047p_transaction_end(as5047p_t *encoder)
     encoder->dma_state = AS5047P_DMA_IDLE;
 }
 
-static void as5047p_publish(as5047p_t *encoder, uint16_t raw_angle)
+static void as5047p_publish(as5047p_t *encoder,
+                            uint16_t raw_angle,
+                            uint32_t sample_cycle)
 {
     uint32_t primask = __get_PRIMASK();
 
     __disable_irq();
     encoder->encoder_raw_latest = raw_angle;
+    encoder->encoder_sample_cycle = sample_cycle;
     encoder->mechanical_angle_rad_latest =
         (float)raw_angle * AS5047P_RAD_PER_COUNT;
     encoder->encoder_sample_sequence++;
@@ -76,6 +79,7 @@ void as5047p_init(as5047p_t *encoder)
     encoder->dma_state = AS5047P_DMA_IDLE;
     encoder->pipeline_primed = 0U;
     encoder->encoder_valid = 0U;
+    encoder->encoder_sample_cycle = 0U;
     encoder->transfer_start_cycle = 0U;
     encoder->transfer_cycles = 0U;
     encoder->transfer_time_us = 0.0f;
@@ -177,6 +181,7 @@ uint8_t as5047p_latest_get(const as5047p_t *encoder,
     __disable_irq();
     sample->raw = encoder->encoder_raw_latest;
     sample->sequence = encoder->encoder_sample_sequence;
+    sample->cycle = encoder->encoder_sample_cycle;
     sample->valid = encoder->encoder_valid;
     __DMB();
 
@@ -325,7 +330,9 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
     encoder->angle_sample_cycles = angle_sample_cycles;
     encoder->angle_sample_time_us =
         (float)angle_sample_cycles * AS5047P_CPU_CYCLE_TO_US;
-    as5047p_publish(encoder, response & AS5047P_DATA_MASK);
+    /* RX contains the angle requested in the preceding SPI transaction. */
+    as5047p_publish(encoder, response & AS5047P_DATA_MASK,
+                    (uint32_t)(transfer_end_cycle - angle_sample_cycles));
 }
 
 void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi)

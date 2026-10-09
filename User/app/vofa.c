@@ -48,7 +48,8 @@ static uint16_t vofa_packet_build(void)
 			pm.foc.i_d,
 			pm.foc.i_q_ref,
 			pm.foc.i_d_ref,
-			
+			pm.foc.u_d,
+			pm.foc.u_q,
 //			(float)ADC1->JDR1,
 //				(float)ADC1->JDR2,
 //					(float)ADC1->JDR3,
@@ -65,8 +66,8 @@ static uint16_t vofa_packet_build(void)
         (float)pm.svpwm.ccr3,         /* CH12: phase C PWM compare */
 //			
 				pm.foc.mechanical_angle_rad,
-				pm.foc.electrical_angle_rad,
-			
+//				pm.foc.electrical_angle_rad,
+			pm.speed.mechanical_rad_s
 			
 //				/*У׼*/
 //				(float)pm.encoder_foc_sample.raw,

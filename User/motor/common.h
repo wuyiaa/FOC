@@ -6,10 +6,12 @@
 #include "tim.h"
 #include "dwt_time.h"
 #include "as5047p.h"
+#include "motor_speed.h"
+#include "motor_config.h"
 
 /* Set to 1U to enable three-phase PWM automatically after initialization. */
 #ifndef FOC_PWM_OUTPUT_DEFAULT_ENABLED
-#define FOC_PWM_OUTPUT_DEFAULT_ENABLED       1U
+#define FOC_PWM_OUTPUT_DEFAULT_ENABLED       0U
 #endif
 
 #ifndef FOC_ENCODER_ZERO_CALIBRATION_MODE
@@ -24,9 +26,6 @@
      (FOC_PWM_OUTPUT_DEFAULT_ENABLED == 0U))
 #error "Enable FOC PWM explicitly to run encoder zero calibration"
 #endif
-
-/* Latched phase-current trip threshold; measured phase current in amperes. */
-#define FOC_CURRENT_TRIP_LIMIT_A              20.000f
 
 /* TIM1 PWM and ADC current-sampling window, expressed in timer ticks. */
 #define PWM_PERIOD_TICKS                       4000U
@@ -176,6 +175,7 @@ typedef struct
     pmsm_motor_t motor;
     as5047p_t encoder;
     as5047p_sample_t encoder_foc_sample;
+    motor_speed_t speed;
     pmsm_adc_val_t adc;
     pmsm_foc_t foc;
     pmsm_svpwm_t svpwm;
@@ -203,6 +203,7 @@ void svpwm_calc(pmsm_t *pm, float v_dc, float v_min);
 void foc_voltage_calc(pmsm_t *pm, float v_dc, float v_min);
 HAL_StatusTypeDef foc_pwm_output_enable(pmsm_t *pm);
 void foc_pwm_output_disable(void);
+uint8_t foc_pwm_output_is_enabled(void);
 void foc_pwm_output_update(const pmsm_t *pm);
 
 #endif /* USER_MOTOR_COMMON_H */

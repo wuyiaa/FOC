@@ -1,5 +1,5 @@
-#ifndef USER_MOTOR_AS5047P_H
-#define USER_MOTOR_AS5047P_H
+#ifndef USER_APP_AS5047P_H
+#define USER_APP_AS5047P_H
 
 #include "main.h"
 
@@ -20,6 +20,7 @@ typedef struct
     uint16_t raw;
     uint8_t valid;
     uint32_t sequence;
+    uint32_t cycle;
 } as5047p_sample_t;
 
 typedef struct
@@ -27,6 +28,7 @@ typedef struct
     volatile uint16_t encoder_raw_latest;
     volatile uint8_t encoder_valid;
     volatile uint32_t encoder_sample_sequence;
+    volatile uint32_t encoder_sample_cycle;
     volatile float mechanical_angle_rad_latest;
 
     volatile uint32_t transfer_start_cycle;
@@ -69,4 +71,4 @@ uint8_t as5047p_latest_get(const as5047p_t *encoder,
 uint8_t as5047p_protection_update(as5047p_t *encoder,
                                   const as5047p_sample_t *sample);
 
-#endif /* USER_MOTOR_AS5047P_H */
+#endif /* USER_APP_AS5047P_H */

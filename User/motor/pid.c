@@ -6,21 +6,31 @@
 #include <stddef.h>
 
 /*
- * Separate editable parameter arrays; order: Kp, Ki, Kd, output limit,
- * integral limit, current-error deadband. PID output/limits are in volts.
- * Gains use fc = fpwm / 20 = 1 kHz, Kp = 2*pi*fc*L,
- * Ki = 2*pi*fc*Rs, and Kd = 0.
+ * Parameter order: Kp, Ki, Kd, output limit, integral limit, deadband.
+ * PID output/limits are in volts. Kp = 2*pi*fc*L, Ki = 2*pi*fc*Rs.
+ * Edit motor_config.h to change the motor and current-loop parameters.
  */
+#define FOC_CURRENT_OUTPUT_LIMIT_V \
+    (FOC_DC_BUS_VOLTAGE_V * FOC_CURRENT_OUTPUT_UTILIZATION * ONE_BY_SQRT3)
+
 static const float foc_id_pid_parameters[PID_PARAMETER_COUNT] =
-{//17.8819
-    3.1415926*2*1000*0.002846f, 3.1415926*2*1000*6.617f, 0.0f,
-    24.0*0.9*0.57735f, 24.0*0.9*0.57735*0.5f, 0.0f
+{
+    TWO_PI * FOC_CURRENT_LOOP_BANDWIDTH_HZ * FOC_MOTOR_LD_H,
+    TWO_PI * FOC_CURRENT_LOOP_BANDWIDTH_HZ * FOC_MOTOR_RS_OHM,
+    FOC_CURRENT_KD_V_S_PER_A,
+    FOC_CURRENT_OUTPUT_LIMIT_V,
+    FOC_CURRENT_OUTPUT_LIMIT_V * FOC_CURRENT_INTEGRAL_LIMIT_RATIO,
+    FOC_CURRENT_DEADBAND_A
 };
 
 static const float foc_iq_pid_parameters[PID_PARAMETER_COUNT] =
 {
-    3.1415926*2*1000*0.005698f, 3.1415926*2*1000*6.617f, 0.0f,
-    24.0*0.9*0.57735f, 24.0*0.9*0.57735*0.5f, 0.0f
+    TWO_PI * FOC_CURRENT_LOOP_BANDWIDTH_HZ * FOC_MOTOR_LQ_H,
+    TWO_PI * FOC_CURRENT_LOOP_BANDWIDTH_HZ * FOC_MOTOR_RS_OHM,
+    FOC_CURRENT_KD_V_S_PER_A,
+    FOC_CURRENT_OUTPUT_LIMIT_V,
+    FOC_CURRENT_OUTPUT_LIMIT_V * FOC_CURRENT_INTEGRAL_LIMIT_RATIO,
+    FOC_CURRENT_DEADBAND_A
 };
 
 static pid_controller_t foc_id_pid;
