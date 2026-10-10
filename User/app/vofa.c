@@ -12,6 +12,10 @@ extern USBD_HandleTypeDef hUsbDeviceFS;
 #define VOFA_SEND_PERIOD_US       50U
 #define VOFA_SEND_PERIOD_CYCLES \
     ((DWT_CPU_FREQ_HZ / 1000000UL) * VOFA_SEND_PERIOD_US)
+#define VOFA_HOST_SETTLE_TIME_MS  10U
+#define VOFA_TX_TIMEOUT_MS         500U
+#define VOFA_TX_TIMEOUT_CYCLES \
+    ((DWT_CPU_FREQ_HZ / 1000UL) * VOFA_TX_TIMEOUT_MS)
 #define VOFA_JUSTFLOAT_TAIL_SIZE  4U
 #define VOFA_MAX_CHANNEL_COUNT    15U
 
@@ -26,10 +30,27 @@ extern USBD_HandleTypeDef hUsbDeviceFS;
 /* CDC retains the Tx buffer pointer until the USB IN transfer completes. */
 static uint8_t vofa_tx_buffer[VOFA_BUFFER_SIZE];
 static uint32_t vofa_last_send_cycle;
+static uint32_t vofa_tx_start_cycle;
+static volatile uint8_t vofa_host_ready;
+static volatile uint8_t vofa_host_request_pending;
+static volatile uint32_t vofa_host_request_tick;
 
 void vofa_init(void)
 {
     vofa_last_send_cycle = DWT->CYCCNT;
+}
+
+void vofa_usb_host_request(void)
+{
+    vofa_host_request_tick = HAL_GetTick();
+    vofa_host_ready = 1U;
+    vofa_host_request_pending = 1U;
+}
+
+void vofa_usb_disconnected(void)
+{
+    vofa_host_ready = 0U;
+    vofa_host_request_pending = 0U;
 }
 
 static uint16_t vofa_packet_build(void)
@@ -39,38 +60,40 @@ static uint16_t vofa_packet_build(void)
         pm.foc.i_a,                  /* CH0: phase A current (A) */
         pm.foc.i_b,                  /* CH1: phase B current (A) */
         pm.foc.i_c,                  /* CH2: phase C current (A) */
-//        pm.foc.u_alpha,                  /* CH3: d-axis current (A) */
+
+			//        pm.foc.u_alpha,                  /* CH3: d-axis current (A) */
 //        pm.foc.u_beta,                  /* CH4: q-axis current (A) */
 //			pm.foc.i_a_ref,                  /* CH0: phase A current (A) */
 //        pm.foc.i_b_ref,                  /* CH1: phase B current (A) */
 //        pm.foc.i_c_ref,  
 			pm.foc.i_q,
-			pm.foc.i_d,
 			pm.foc.i_q_ref,
+			pm.foc.i_d,			
 			pm.foc.i_d_ref,
 			pm.foc.u_d,
 			pm.foc.u_q,
+			
+//			pm.foc.i_alpha,              /* CH5: alpha-axis current (A) */
+//			pm.foc.i_beta,               /* CH6: beta-axis current (A) */
+
 //			(float)ADC1->JDR1,
 //				(float)ADC1->JDR2,
 //					(float)ADC1->JDR3,
 //						pm.adc.ia_off,
 //					pm.adc.ib_off,
 //					pm.adc.ic_off
-//        pm.foc.electrical_angle_rad, /* CH5: electrical angle (rad) */
-//        pm.foc.u_d,                  /* CH6: d-axis voltage command (V) */
-//        pm.foc.u_q,                  /* CH7: q-axis voltage command (V) */
-//        pm.foc.u_alpha,              /* CH8: alpha voltage command (V) */
-//        pm.foc.u_beta,               /* CH9: beta voltage command (V) */
-        (float)pm.svpwm.ccr1,        /* CH10: phase A PWM compare */
-        (float)pm.svpwm.ccr2,        /* CH11: phase B PWM compare */
-        (float)pm.svpwm.ccr3,         /* CH12: phase C PWM compare */
+        (float)pm.svpwm.ccr1,        /* CH9: PWM compare 1 */
+        (float)pm.svpwm.ccr2,        /* CH10: PWM compare 2 */
+        (float)pm.svpwm.ccr3,        /* CH11: PWM compare 3 */
 //			
-				pm.foc.mechanical_angle_rad,
+				pm.foc.mechanical_angle_rad, /* CH12: mechanical angle (rad) */
 //				pm.foc.electrical_angle_rad,
-			pm.speed.mechanical_rad_s
+//			pm.speed.mechanical_rad_s  /* CH13: mechanical speed (rad/s) */
 			
+				
+				
 //				/*У׼*/
-//				(float)pm.encoder_foc_sample.raw,
+				(float)pm.encoder_foc_sample.raw,
 //				(float)calibration.sampling,
 //				(float)calibration.done,
 //				(float)calibration.sample_count,
@@ -126,15 +149,50 @@ void vofa_process(void)
 
     /* CDC_Transmit_FS dereferences pClassData, so wait for USB enumeration. */
     if ((hUsbDeviceFS.dev_state != USBD_STATE_CONFIGURED) ||
-        (hUsbDeviceFS.pClassData == NULL))
+        (hUsbDeviceFS.pClassData == NULL) ||
+        (vofa_host_ready == 0U) ||
+        ((uint32_t)(HAL_GetTick() - vofa_host_request_tick) <
+         VOFA_HOST_SETTLE_TIME_MS))
     {
         return;
     }
 
     hcdc = (USBD_CDC_HandleTypeDef *)hUsbDeviceFS.pClassData;
+    if (vofa_host_request_pending != 0U)
+    {
+        /* Discard a transfer left pending by an earlier port session. */
+        HAL_NVIC_DisableIRQ(USB_LP_IRQn);
+        if (hcdc->TxState != 0U)
+        {
+            if ((hUsbDeviceFS.pData == NULL) ||
+                (HAL_PCD_EP_Abort((PCD_HandleTypeDef *)hUsbDeviceFS.pData,
+                                  CDC_IN_EP) != HAL_OK))
+            {
+                HAL_NVIC_EnableIRQ(USB_LP_IRQn);
+                return;
+            }
+            hcdc->TxState = 0U;
+        }
+        vofa_host_request_pending = 0U;
+        HAL_NVIC_EnableIRQ(USB_LP_IRQn);
+    }
+
     if (hcdc->TxState != 0U)
     {
-        /* Keep the static packet buffer unchanged while USB owns it. */
+        /* A closed host port can leave its last IN transfer pending forever. */
+        if ((uint32_t)(now_cycle - vofa_tx_start_cycle) >=
+            VOFA_TX_TIMEOUT_CYCLES)
+        {
+            HAL_NVIC_DisableIRQ(USB_LP_IRQn);
+            if ((hcdc->TxState != 0U) && (hUsbDeviceFS.pData != NULL) &&
+                (HAL_PCD_EP_Abort((PCD_HandleTypeDef *)hUsbDeviceFS.pData,
+                                  CDC_IN_EP) == HAL_OK))
+            {
+                hcdc->TxState = 0U;
+                vofa_host_ready = 0U;
+            }
+            HAL_NVIC_EnableIRQ(USB_LP_IRQn);
+        }
         return;
     }
 
@@ -145,5 +203,6 @@ void vofa_process(void)
     }
 
     /* Non-blocking: a busy CDC endpoint simply skips this sample frame. */
+    vofa_tx_start_cycle = now_cycle;
     (void)CDC_Transmit_FS(vofa_tx_buffer, packet_size);
 }

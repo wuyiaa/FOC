@@ -11,7 +11,7 @@
 
 /* Set to 1U to enable three-phase PWM automatically after initialization. */
 #ifndef FOC_PWM_OUTPUT_DEFAULT_ENABLED
-#define FOC_PWM_OUTPUT_DEFAULT_ENABLED       0U
+#define FOC_PWM_OUTPUT_DEFAULT_ENABLED       1U
 #endif
 
 #ifndef FOC_ENCODER_ZERO_CALIBRATION_MODE

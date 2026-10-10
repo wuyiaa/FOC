@@ -22,6 +22,7 @@
 #include "usbd_cdc_if.h"
 
 /* USER CODE BEGIN INCLUDE */
+#include "vofa.h"
 
 /* USER CODE END INCLUDE */
 
@@ -152,6 +153,7 @@ USBD_CDC_ItfTypeDef USBD_Interface_fops_FS =
 static int8_t CDC_Init_FS(void)
 {
   /* USER CODE BEGIN 3 */
+  vofa_usb_disconnected();
   /* Set Application Buffers */
   USBD_CDC_SetTxBuffer(&hUsbDeviceFS, UserTxBufferFS, 0);
   USBD_CDC_SetRxBuffer(&hUsbDeviceFS, UserRxBufferFS);
@@ -166,6 +168,7 @@ static int8_t CDC_Init_FS(void)
 static int8_t CDC_DeInit_FS(void)
 {
   /* USER CODE BEGIN 4 */
+  vofa_usb_disconnected();
   return (USBD_OK);
   /* USER CODE END 4 */
 }
@@ -221,6 +224,8 @@ static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length)
   /*******************************************************************************/
     case CDC_SET_LINE_CODING:
 
+    vofa_usb_host_request();
+
     break;
 
     case CDC_GET_LINE_CODING:
@@ -228,6 +233,8 @@ static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length)
     break;
 
     case CDC_SET_CONTROL_LINE_STATE:
+
+    vofa_usb_host_request();
 
     break;
 

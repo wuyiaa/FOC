@@ -78,8 +78,8 @@ void foc_pwm_output_update(const pmsm_t *pm)
 
     /* CCR preload applies the three phase duties together at a timer update. */
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, pm->svpwm.ccr1);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, pm->svpwm.ccr3);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, pm->svpwm.ccr2);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, pm->svpwm.ccr2);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, pm->svpwm.ccr3);
 }
 
 void pmsm_board_init(void)

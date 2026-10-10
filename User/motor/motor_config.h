@@ -8,7 +8,7 @@
 #define FOC_MOTOR_POLE_PAIRS                   11U
 
 /* Current-loop tuning and voltage limits. */
-#define FOC_CURRENT_LOOP_BANDWIDTH_HZ          500.0f
+#define FOC_CURRENT_LOOP_BANDWIDTH_HZ          250.0f
 #define FOC_DC_BUS_VOLTAGE_V                   24.0f
 #define FOC_CURRENT_OUTPUT_UTILIZATION         0.95f
 #define FOC_CURRENT_INTEGRAL_LIMIT_RATIO       0.5f
@@ -17,5 +17,6 @@
 
 /* Latched phase-current trip threshold. */
 #define FOC_CURRENT_TRIP_LIMIT_A               20.000f
+#define MOTOR_MECHANICAL_DRV									 -1.0f
 
 #endif /* USER_MOTOR_MOTOR_CONFIG_H */

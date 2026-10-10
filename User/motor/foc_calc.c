@@ -188,16 +188,16 @@ static uint8_t foc_electrical_angle_get(pmsm_t *pm,
         (corrected_mechanical_count * (uint32_t)pm->motor.pn) &
         AS5047P_DATA_MASK;
 		
-		pm->foc.mechanical_angle_rad =
+		pm->foc.mechanical_angle_rad = MOTOR_MECHANICAL_DRV * 
         (float)corrected_mechanical_count * AS5047P_RAD_PER_COUNT;
-    pm->foc.electrical_angle_rad =
+    pm->foc.electrical_angle_rad = MOTOR_MECHANICAL_DRV * 
         (float)electrical_count * AS5047P_RAD_PER_COUNT;
 						
 #endif
 //theta_e +=0.00005*10;
 //pm->foc.electrical_angle_rad=theta_e;
-    *sin_theta = sinf(pm->foc.electrical_angle_rad);
-    *cos_theta = cosf(pm->foc.electrical_angle_rad);
+    *sin_theta = sinf(-pm->foc.electrical_angle_rad);
+    *cos_theta = cosf(-pm->foc.electrical_angle_rad);
 
     return 1U;
 }
@@ -240,8 +240,10 @@ void inverse_park_transform(pmsm_t *pm)
     /* Inverse of the Park convention used above. */
     pm->foc.u_alpha = pm->foc.u_d * cos_theta
                     - pm->foc.u_q * sin_theta;
-    pm->foc.u_beta = pm->foc.u_d * sin_theta
-                   + pm->foc.u_q * cos_theta;
+    pm->foc.u_beta  = pm->foc.u_d * sin_theta
+                    + pm->foc.u_q * cos_theta;
+//		pm->foc.u_alpha = 2.5f;//2.5f; 5.0f
+//		pm->foc.u_beta  = 4.33f;//4.33f 0.0f
 }
 
 static uint16_t svpwm_ccr_from_time(float phase_time, float period)
