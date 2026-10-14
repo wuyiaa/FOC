@@ -1,5 +1,6 @@
 #include "common.h"
 #include "encoder_zero_calibration.h"
+#include "phase_auto_calibration.h"
 
 #include <math.h>
 
@@ -112,6 +113,13 @@ void foc_current_sample_process(pmsm_t *pm)
     sample->pwm_cmp_b = (uint16_t)TIM1->CCR2;
     sample->pwm_cmp_c = (uint16_t)TIM1->CCR3;
 
+    if (calibration.phase_reversed != 0U)
+    {
+        uint16_t swap = sample->pwm_cmp_a;
+        sample->pwm_cmp_a = sample->pwm_cmp_c;
+        sample->pwm_cmp_c = swap;
+    }
+
     sample->window_a = current_window_get(sample->pwm_cmp_a);
     sample->window_b = current_window_get(sample->pwm_cmp_b);
     sample->window_c = current_window_get(sample->pwm_cmp_c);
@@ -166,18 +174,13 @@ static uint8_t foc_electrical_angle_get(pmsm_t *pm,
                                        float *sin_theta,
                                        float *cos_theta)
 {
+    uint32_t corrected_mechanical_count;
+    uint32_t electrical_count;
+
     if (pm->encoder_foc_sample.valid == 0U)
     {
         return 0U;
     }
-
-
-#if (FOC_ENCODER_ZERO_CALIBRATION_MODE != 0U)
-    pm->foc.electrical_angle_rad = 0.0f;
-#else
-    uint32_t corrected_mechanical_count;
-    uint32_t electrical_count;
-
     /* Keep the DMA-published raw angle untouched; compensate only for FOC. */
     corrected_mechanical_count =
         ((uint32_t)pm->encoder_foc_sample.raw +
@@ -188,16 +191,22 @@ static uint8_t foc_electrical_angle_get(pmsm_t *pm,
         (corrected_mechanical_count * (uint32_t)pm->motor.pn) &
         AS5047P_DATA_MASK;
 		
-		pm->foc.mechanical_angle_rad = MOTOR_MECHANICAL_DRV * 
+		pm->foc.mechanical_angle_rad = MOTOR_MECHANICAL_DRV *
         (float)corrected_mechanical_count * AS5047P_RAD_PER_COUNT;
-    pm->foc.electrical_angle_rad = MOTOR_MECHANICAL_DRV * 
-        (float)electrical_count * AS5047P_RAD_PER_COUNT;
-						
-#endif
+    /* Both Park and inverse Park use electrical zero during zero calibration. */
+    if (encoder_zero_calibration_requested != 0U)
+    {
+        pm->foc.electrical_angle_rad = 0.0f;
+    }
+    else
+    {
+        pm->foc.electrical_angle_rad = (float)calibration.electrical_direction *
+            (float)electrical_count * AS5047P_RAD_PER_COUNT;
+    }
 //theta_e +=0.00005*10;
 //pm->foc.electrical_angle_rad=theta_e;
-    *sin_theta = sinf(-pm->foc.electrical_angle_rad);
-    *cos_theta = cosf(-pm->foc.electrical_angle_rad);
+    *sin_theta = sinf(pm->foc.electrical_angle_rad);
+    *cos_theta = cosf(pm->foc.electrical_angle_rad);
 
     return 1U;
 }
@@ -401,7 +410,9 @@ void svpwm_calc(pmsm_t *pm, float v_dc, float v_min)
 
 void foc_voltage_calc(pmsm_t *pm, float v_dc, float v_min)
 {
-#if (FOC_ENCODER_ZERO_CALIBRATION_MODE != 0U)
+#if (FOC_PHASE_AUTO_CALIBRATION_MODE != 0U)
+    foc_phase_auto_calibration_step(pm, v_dc, v_min);
+#elif (FOC_ENCODER_ZERO_CALIBRATION_MODE != 0U)
     foc_encoder_zero_calibration_step(pm, v_dc, v_min);
 #else
     if (pm->encoder_foc_sample.valid == 0U)

@@ -14,17 +14,33 @@
 #define FOC_PWM_OUTPUT_DEFAULT_ENABLED       1U
 #endif
 
+/* Encoder zero-only calibration. */
 #ifndef FOC_ENCODER_ZERO_CALIBRATION_MODE
 #define FOC_ENCODER_ZERO_CALIBRATION_MODE    0U
 #endif
 
+/* Independent switch for automatic phase-order and electrical-direction calibration. */
+#ifndef FOC_PHASE_AUTO_CALIBRATION_MODE
+#define FOC_PHASE_AUTO_CALIBRATION_MODE      0U
+#endif
+
 #define ENCODER_ZERO_ALIGN_TIME_S            1U
-#define ENCODER_ZERO_ALIGN_VOLTAGE_V         0.66f
+#define ENCODER_ZERO_ALIGN_VOLTAGE_V         2.0f
 #define ENCODER_ZERO_SAMPLE_TIME_MS          100U
 
 #if ((FOC_ENCODER_ZERO_CALIBRATION_MODE != 0U) && \
      (FOC_PWM_OUTPUT_DEFAULT_ENABLED == 0U))
 #error "Enable FOC PWM explicitly to run encoder zero calibration"
+#endif
+
+#if ((FOC_PHASE_AUTO_CALIBRATION_MODE != 0U) && \
+     (FOC_PWM_OUTPUT_DEFAULT_ENABLED == 0U))
+#error "Enable FOC PWM explicitly to run phase auto calibration"
+#endif
+
+#if ((FOC_ENCODER_ZERO_CALIBRATION_MODE != 0U) && \
+     (FOC_PHASE_AUTO_CALIBRATION_MODE != 0U))
+#error "Select either encoder zero calibration or phase auto calibration"
 #endif
 
 /* TIM1 PWM and ADC current-sampling window, expressed in timer ticks. */
@@ -167,6 +183,16 @@ typedef struct
     volatile uint8_t done;
     volatile uint8_t flash_save_attempted;
     volatile uint8_t flash_saved;
+    volatile uint8_t phase_reversed;
+    volatile int8_t electrical_direction;
+    volatile uint8_t state;
+    volatile uint8_t failed;
+    volatile uint8_t direction_retried;
+    volatile uint8_t phase_retried;
+    volatile uint32_t drive_start_cycle;
+    volatile uint8_t drive_observation_started;
+    volatile uint16_t drive_last_raw;
+    volatile int32_t drive_delta_counts;
 } pmsm_encoder_zero_cal_t;
 
 typedef struct

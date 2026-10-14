@@ -3,6 +3,7 @@
 #include <stddef.h>
 
 #include "dwt_time.h"
+#include "motor_config.h"
 
 /* A 1 ms difference window reduces 14-bit encoder quantization at 20 kHz. */
 #define MOTOR_SPEED_WINDOW_CYCLES  (DWT_CPU_FREQ_HZ / 1000UL)
@@ -74,8 +75,10 @@ void motor_speed_update(motor_speed_t *speed,
         delta_count += (int32_t)MOTOR_SPEED_COUNTS_PER_REV;
     }
 
+    /* Physical CCW speed is positive, independent of FOC phase/angle setup. */
     speed->mechanical_rad_s =
-        ((float)delta_count * AS5047P_RAD_PER_COUNT * (float)DWT_CPU_FREQ_HZ) /
+        ((float)delta_count * MOTOR_SPEED_DIRECTION * AS5047P_RAD_PER_COUNT *
+         (float)DWT_CPU_FREQ_HZ) /
         (float)elapsed_cycles;
     speed->electrical_rad_s =
         speed->mechanical_rad_s * (float)pole_pairs;

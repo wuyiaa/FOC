@@ -151,14 +151,20 @@ int main(void)
     vofa_process();
     key_control_process();
 
-#if (FOC_ENCODER_ZERO_CALIBRATION_MODE != 0U)
+#if ((FOC_ENCODER_ZERO_CALIBRATION_MODE != 0U) || \
+     (FOC_PHASE_AUTO_CALIBRATION_MODE != 0U))
+    if (calibration.failed != 0U)
+    {
+      HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, GPIO_PIN_SET);
+    }
+
     /* Calibration completes in the ADC ISR; persist the result here in the
        non-real-time foreground, with PWM already disabled. */
     if ((calibration.done != 0U) &&
         (calibration.flash_save_attempted == 0U))
     {
       calibration.flash_save_attempted = 1U;
-      if (encoder_zero_flash_save(calibration.mechanical_zero_raw) == HAL_OK)
+      if (encoder_zero_flash_save(&calibration) == HAL_OK)
       {
         calibration.flash_saved = 1U;
       }

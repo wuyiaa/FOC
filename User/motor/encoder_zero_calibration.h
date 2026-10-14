@@ -4,12 +4,16 @@
 #include "common.h"
 
 extern volatile pmsm_encoder_zero_cal_t calibration;
+/* 1: run zero calibration; cleared when complete or aborted by a fault. */
+extern volatile uint8_t encoder_zero_calibration_requested;
 
-HAL_StatusTypeDef encoder_zero_flash_load(volatile uint16_t *raw_offset);
-HAL_StatusTypeDef encoder_zero_flash_save(uint16_t raw_offset);
+HAL_StatusTypeDef encoder_zero_flash_load(volatile pmsm_encoder_zero_cal_t *config);
+HAL_StatusTypeDef encoder_zero_flash_save(const volatile pmsm_encoder_zero_cal_t *config);
 
-#if (FOC_ENCODER_ZERO_CALIBRATION_MODE != 0U)
+#if ((FOC_ENCODER_ZERO_CALIBRATION_MODE != 0U) || \
+     (FOC_PHASE_AUTO_CALIBRATION_MODE != 0U))
 void foc_encoder_zero_calibration_init(void);
+
 void foc_encoder_zero_calibration_step(pmsm_t *pm, float v_dc, float v_min);
 #endif
 

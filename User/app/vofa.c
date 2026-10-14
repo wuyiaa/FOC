@@ -69,7 +69,7 @@ static uint16_t vofa_packet_build(void)
 			pm.foc.i_q,
 			pm.foc.i_q_ref,
 			pm.foc.i_d,			
-			pm.foc.i_d_ref,
+//			pm.foc.i_d_ref,
 			pm.foc.u_d,
 			pm.foc.u_q,
 			
@@ -82,13 +82,13 @@ static uint16_t vofa_packet_build(void)
 //						pm.adc.ia_off,
 //					pm.adc.ib_off,
 //					pm.adc.ic_off
-        (float)pm.svpwm.ccr1,        /* CH9: PWM compare 1 */
-        (float)pm.svpwm.ccr2,        /* CH10: PWM compare 2 */
-        (float)pm.svpwm.ccr3,        /* CH11: PWM compare 3 */
+//        (float)pm.svpwm.ccr1,        /* CH9: PWM compare 1 */
+//        (float)pm.svpwm.ccr2,        /* CH10: PWM compare 2 */
+//        (float)pm.svpwm.ccr3,        /* CH11: PWM compare 3 */
 //			
 				pm.foc.mechanical_angle_rad, /* CH12: mechanical angle (rad) */
 //				pm.foc.electrical_angle_rad,
-//			pm.speed.mechanical_rad_s  /* CH13: mechanical speed (rad/s) */
+			pm.speed.mechanical_rad_s,  /* CH13: mechanical speed (rad/s) */
 			
 				
 				
@@ -97,7 +97,7 @@ static uint16_t vofa_packet_build(void)
 //				(float)calibration.sampling,
 //				(float)calibration.done,
 //				(float)calibration.sample_count,
-//				(float)calibration.mechanical_zero_raw
+				(float)calibration.mechanical_zero_raw
 //				(float)calibration.mechanical_zero_angle_rad
     };
     uint16_t channel_count;

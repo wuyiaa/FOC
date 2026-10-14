@@ -17,6 +17,18 @@
 
 /* Latched phase-current trip threshold. */
 #define FOC_CURRENT_TRIP_LIMIT_A               20.000f
-#define MOTOR_MECHANICAL_DRV									 -1.0f
+/* AS5047P count decreases when the shaft turns counterclockwise. */
+#define MOTOR_MECHANICAL_DRV                     -1.0f
+#define MOTOR_SPEED_DIRECTION                    -1.0f
+/* Existing 321 wiring uses an effective positive angle after the old
+   MOTOR_MECHANICAL_DRV and sin(-angle) signs cancel. */
+#define MOTOR_PHASE_REVERSED_DEFAULT             1U //1--321œ‡–Ú 0--123œ‡–Ú
+#define MOTOR_ELECTRICAL_DIRECTION_DEFAULT       1	//1--+theta  0--(-theta)
+
+/* Automatic phase/direction calibration, enabled by the calibration mode. */
+#define MOTOR_CALIBRATION_UQ_V                    5.0f
+#define MOTOR_CALIBRATION_SETTLE_TIME_MS          200U
+#define MOTOR_CALIBRATION_DRIVE_TIME_MS           800U
+#define MOTOR_CALIBRATION_MIN_MOVE_COUNTS         164U
 
 #endif /* USER_MOTOR_MOTOR_CONFIG_H */

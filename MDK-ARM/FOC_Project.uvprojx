@@ -687,6 +687,16 @@
               <FilePath>../User/motor/encoder_zero_calibration.h</FilePath>
             </File>
             <File>
+              <FileName>phase_auto_calibration.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../User/motor/phase_auto_calibration.c</FilePath>
+            </File>
+            <File>
+              <FileName>phase_auto_calibration.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../User/motor/phase_auto_calibration.h</FilePath>
+            </File>
+            <File>
               <FileName>motor_speed.c</FileName>
               <FileType>1</FileType>
               <FilePath>../User/motor/motor_speed.c</FilePath>

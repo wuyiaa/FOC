@@ -59,11 +59,14 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
         }
 
         foc_current_calc(&pm);
-				pm.foc.i_d_ref = 0;
-				pm.foc.i_q_ref = 5.0f;
+#if ((FOC_ENCODER_ZERO_CALIBRATION_MODE == 0U) && \
+     (FOC_PHASE_AUTO_CALIBRATION_MODE == 0U))
+//				pm.foc.i_d_ref = 0;
+//				pm.foc.i_q_ref = 5.0f;
         foc_current_pid_update(&pm, PWM_PERIOD_S);
-//				pm.foc.u_d = 0.0f;
-//				pm.foc.u_q = 5.0f;
+#endif
+				pm.foc.u_d = 0.0f;
+				pm.foc.u_q = 5.0f;
         foc_voltage_calc(&pm, FOC_DC_BUS_VOLTAGE_V, pm.svpwm.vref2_min);
         foc_pwm_output_update(&pm);
         /* Start the next pipelined encoder DMA frame, then leave immediately. */

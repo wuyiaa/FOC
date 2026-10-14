@@ -17,6 +17,14 @@ HAL_StatusTypeDef foc_pwm_output_enable(pmsm_t *pm)
         return HAL_ERROR;
     }
 
+#if ((FOC_ENCODER_ZERO_CALIBRATION_MODE != 0U) || \
+     (FOC_PHASE_AUTO_CALIBRATION_MODE != 0U))
+    if ((calibration.done != 0U) || (calibration.failed != 0U))
+    {
+        return HAL_ERROR;
+    }
+#endif
+
     if (foc_pwm_channels_started != 0U)
     {
         __HAL_TIM_MOE_ENABLE(&htim1);
@@ -76,10 +84,17 @@ void foc_pwm_output_update(const pmsm_t *pm)
         return;
     }
 
-    /* CCR preload applies the three phase duties together at a timer update. */
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, pm->svpwm.ccr1);
+    /* Reverse means 123 <-> 321: swap A/C, never a cyclic 120-degree shift. */
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1,
+                          (calibration.phase_reversed != 0U) ?
+                          pm->svpwm.ccr3 : pm->svpwm.ccr1);
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, pm->svpwm.ccr2);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, pm->svpwm.ccr3);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3,
+                          (calibration.phase_reversed != 0U) ?
+                          pm->svpwm.ccr1 : pm->svpwm.ccr3);
+//		 __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, pm->svpwm.ccr1);
+//    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, pm->svpwm.ccr2);
+//    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, pm->svpwm.ccr3);
 }
 
 void pmsm_board_init(void)
@@ -113,11 +128,18 @@ void pmsm_motor_init(void)
 void pmsm_init(void)
 {
     memset(&pm, 0, sizeof(pm));
-#if (FOC_ENCODER_ZERO_CALIBRATION_MODE != 0U)
+    calibration.phase_reversed = MOTOR_PHASE_REVERSED_DEFAULT;
+    calibration.electrical_direction = MOTOR_ELECTRICAL_DIRECTION_DEFAULT;
+#if (FOC_PHASE_AUTO_CALIBRATION_MODE != 0U)
     foc_encoder_zero_calibration_init();
-#endif
+#elif (FOC_ENCODER_ZERO_CALIBRATION_MODE != 0U)
+    /* Keep the last selected phase order/direction while refreshing only zero. */
+    (void)encoder_zero_flash_load(&calibration);
+    foc_encoder_zero_calibration_init();
+#else
     /* Restore the last calibrated offset for normal FOC operation. */
-    (void)encoder_zero_flash_load(&calibration.mechanical_zero_raw);
+    (void)encoder_zero_flash_load(&calibration);
+#endif
     pmsm_board_init();
     pmsm_motor_init();
     foc_current_pid_init();
@@ -138,6 +160,9 @@ void foc_get_curr_off(void)
         sum_a += (float)ADC1->JDR3;
         sum_b += (float)ADC1->JDR2;
         sum_c += (float)ADC1->JDR1;
+//			  sum_a += (float)ADC1->JDR2;
+//        sum_b += (float)ADC1->JDR1;
+//        sum_c += (float)ADC1->JDR3;
     }
 
     pm.adc.ia_off = sum_a * 0.001f;
@@ -148,11 +173,30 @@ void foc_get_curr_off(void)
 
 void foc_adc_sample(pmsm_t *pm)
 {
-    pm->adc.ia = (uint16_t)ADC1->JDR3;
+    pm->adc.ia = (calibration.phase_reversed != 0U) ?
+                 (uint16_t)ADC1->JDR1 : (uint16_t)ADC1->JDR3;
     pm->adc.ib = (uint16_t)ADC1->JDR2;
-    pm->adc.ic = (uint16_t)ADC1->JDR1;
+    pm->adc.ic = (calibration.phase_reversed != 0U) ?
+                 (uint16_t)ADC1->JDR3 : (uint16_t)ADC1->JDR1;
+//	    pm->adc.ia = (uint16_t)ADC1->JDR2;
+//    pm->adc.ib = (uint16_t)ADC1->JDR1;
+//    pm->adc.ic = (uint16_t)ADC1->JDR3;
 
-    pm->foc.i_a = ((float)pm->adc.ia - pm->adc.ia_off) * pm->board.i_ratio;
+    pm->foc.i_a = ((float)pm->adc.ia -
+                   ((calibration.phase_reversed != 0U) ?
+                    pm->adc.ic_off : pm->adc.ia_off)) * pm->board.i_ratio;
     pm->foc.i_b = ((float)pm->adc.ib - pm->adc.ib_off) * pm->board.i_ratio;
-    pm->foc.i_c = ((float)pm->adc.ic - pm->adc.ic_off) * pm->board.i_ratio;
+    pm->foc.i_c = ((float)pm->adc.ic -
+                   ((calibration.phase_reversed != 0U) ?
+                    pm->adc.ia_off : pm->adc.ic_off)) * pm->board.i_ratio;
+//		
+		
+		
+//		 pm->adc.ia = (uint16_t)ADC1->JDR3;
+//    pm->adc.ib = (uint16_t)ADC1->JDR2;
+//    pm->adc.ic = (uint16_t)ADC1->JDR1;
+
+//    pm->foc.i_a = ((float)pm->adc.ia - pm->adc.ia_off) * pm->board.i_ratio;
+//    pm->foc.i_b = ((float)pm->adc.ib - pm->adc.ib_off) * pm->board.i_ratio;
+//    pm->foc.i_c = ((float)pm->adc.ic - pm->adc.ic_off) * pm->board.i_ratio;
 }
