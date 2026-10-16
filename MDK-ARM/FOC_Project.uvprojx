@@ -313,7 +313,7 @@
           </ArmAdsMisc>
           <Cads>
             <interw>1</interw>
-            <Optim>4</Optim>
+            <Optim>2</Optim>
             <oTime>0</oTime>
             <SplitLS>0</SplitLS>
             <OneElfS>1</OneElfS>
@@ -402,11 +402,6 @@
               <FileName>gpio.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Core/Src/gpio.c</FilePath>
-            </File>
-            <File>
-              <FileName>spi.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>../Core/Src/spi.c</FilePath>
             </File>
             <File>
               <FileName>adc.c</FileName>
@@ -519,6 +514,11 @@
                   </Cads>
                 </FileArmAds>
               </FileOption>
+            </File>
+            <File>
+              <FileName>spi.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/spi.c</FilePath>
             </File>
             <File>
               <FileName>tim.c</FileName>
@@ -636,6 +636,16 @@
         <Group>
           <GroupName>User/bsp</GroupName>
           <Files>
+            <File>
+              <FileName>voltage_sample.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../User/bsp/voltage_sample.c</FilePath>
+            </File>
+            <File>
+              <FileName>voltage_sample.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../User/bsp/voltage_sample.h</FilePath>
+            </File>
             <File>
               <FileName>dwt_time.c</FileName>
               <FileType>1</FileType>

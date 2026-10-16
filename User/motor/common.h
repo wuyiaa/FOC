@@ -46,14 +46,16 @@
 /* TIM1 PWM and ADC current-sampling window, expressed in timer ticks. */
 #define PWM_PERIOD_TICKS                       4000U
 #define PWM_HALF_PERIOD_TICKS                  (PWM_PERIOD_TICKS >> 1U)
-#define ADC_SAMPLE_TOTAL_TICKS                  850U
+/* Minimum nominal low-side ON duration over one complete PWM period.
+   This duration check does not verify the ADC trigger position. */
+#define ADC_SAMPLE_TOTAL_TICKS                  950U
 
 /* Current reconstruction modes selected at compile time. */
 #define CURRENT_RECONSTRUCTION_MAX_CURRENT        1U
 #define CURRENT_RECONSTRUCTION_MIN_WINDOW         2U
 
 #ifndef CURRENT_RECONSTRUCTION_MODE
-#define CURRENT_RECONSTRUCTION_MODE  CURRENT_RECONSTRUCTION_MAX_CURRENT
+#define CURRENT_RECONSTRUCTION_MODE  CURRENT_RECONSTRUCTION_MIN_WINDOW
 #endif
 
 /* Fixed coefficients used by the amplitude-invariant Clarke transform. */
@@ -148,11 +150,16 @@ typedef struct
     uint16_t pwm_cmp_b;
     uint16_t pwm_cmp_c;
 
+    /* Nominal low-side ON duration: 2 * (ARR - CCR), in timer ticks. */
     uint16_t window_a;
     uint16_t window_b;
     uint16_t window_c;
 
-    uint8_t window_valid;
+    /* Per-phase duration >= ADC_SAMPLE_TOTAL_TICKS; 1 means long enough. */
+    uint8_t window_a_valid;
+    uint8_t window_b_valid;
+    uint8_t window_c_valid;
+    uint8_t window_valid; /* 1 only when all three duration checks pass. */
     uint8_t full_clarke;
 
     pmsm_phase_t reconstructed_phase;

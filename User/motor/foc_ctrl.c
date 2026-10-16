@@ -1,4 +1,5 @@
 #include "common.h"
+#include "voltage_sample.h"
 
 static uint8_t foc_current_trip_reached(const pmsm_foc_t *foc)
 {
@@ -12,24 +13,32 @@ static uint8_t foc_current_trip_reached(const pmsm_foc_t *foc)
                      (foc->i_c <= -current_limit));
 }
 
+static void foc_adc_time_measure_update(pmsm_t *pm)
+{
+    if (pm->adc_measure.active != 0U)
+    {
+        pm->adc_measure.sample_time_ms =
+            DWT_GetDeltaT(&pm->adc_measure.time_last) * 1000.0f;
+        pm->adc_measure.active = 0U;
+        pm->adc_measure.done = 1U;
+    }
+}
+
 void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 {
     if (hadc->Instance == ADC1)
     {
         if (pm.adc.offset_ready == 0U)
         {
+            voltage_sample_update();
             return;
         }
 
-        if (pm.adc_measure.active != 0U)
-        {
-            pm.adc_measure.sample_time_ms =
-                DWT_GetDeltaT(&pm.adc_measure.time_last) * 1000.0f;
+        foc_adc_time_measure_update(&pm);
 
-            pm.adc_measure.active = 0U;
-            pm.adc_measure.done = 1U;
-            __HAL_TIM_DISABLE_IT(&htim1, TIM_IT_CC4);
-        }
+        /* Read after the timing marker so voltage processing does not add
+           to the measured ADC conversion latency. Control still uses 24 V. */
+        voltage_sample_update();
 
         /* FOC uses one coherent copy of the most recently published angle. */
         (void)as5047p_latest_get(&pm.encoder, &pm.encoder_foc_sample);
@@ -45,7 +54,7 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 //        }
 
         foc_adc_sample(&pm);
-//        foc_current_sample_process(&pm);
+        foc_current_sample_process(&pm);
 
         /* Keep a hard phase-current trip as an independent safety backup. */
         if ((pm.foc.current_limit_fault != 0U) ||
@@ -66,7 +75,7 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
         foc_current_pid_update(&pm, PWM_PERIOD_S);
 #endif
 				pm.foc.u_d = 0.0f;
-				pm.foc.u_q = 11.0f;
+				pm.foc.u_q = 12.0f;
         foc_voltage_calc(&pm, FOC_DC_BUS_VOLTAGE_V, pm.svpwm.vref2_min);
         foc_pwm_output_update(&pm);
         /* Start the next pipelined encoder DMA frame, then leave immediately. */

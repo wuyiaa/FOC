@@ -16,9 +16,9 @@ static float foc_abs(float value)
 
 static uint8_t current_window_is_valid(const pmsm_current_sample_t *sample)
 {
-    if ((sample->window_a < ADC_SAMPLE_TOTAL_TICKS) ||
-        (sample->window_b < ADC_SAMPLE_TOTAL_TICKS) ||
-        (sample->window_c < ADC_SAMPLE_TOTAL_TICKS))
+    if ((sample->window_a_valid == 0U) ||
+        (sample->window_b_valid == 0U) ||
+        (sample->window_c_valid == 0U))
     {
         return 0U;
     }
@@ -33,12 +33,10 @@ static uint16_t current_window_get(uint16_t pwm_cmp)
         return 0U;
     }
 
-    if (pwm_cmp <= PWM_HALF_PERIOD_TICKS)
-    {
-        return pwm_cmp;
-    }
-
-    return (uint16_t)(PWM_PERIOD_TICKS - pwm_cmp);
+    /* Center-aligned PWM1: the low side conducts while CNT > CCR,
+       on both the up-count and down-count portions of a PWM period.
+       Nominal duration only: no deadtime, settling or trigger correction. */
+    return (uint16_t)(2U * (PWM_PERIOD_TICKS - pwm_cmp));
 }
 
 static pmsm_phase_t max_current_phase_get(const pmsm_foc_t *foc)
@@ -108,7 +106,7 @@ static void current_phase_reconstruct(pmsm_foc_t *foc, pmsm_phase_t phase)
 void foc_current_sample_process(pmsm_t *pm)
 {
     pmsm_current_sample_t *sample = &pm->current_sample;
-
+	
     sample->pwm_cmp_a = (uint16_t)TIM1->CCR1;
     sample->pwm_cmp_b = (uint16_t)TIM1->CCR2;
     sample->pwm_cmp_c = (uint16_t)TIM1->CCR3;
@@ -124,7 +122,10 @@ void foc_current_sample_process(pmsm_t *pm)
     sample->window_b = current_window_get(sample->pwm_cmp_b);
     sample->window_c = current_window_get(sample->pwm_cmp_c);
 
-    sample->window_valid = current_window_is_valid(sample);
+    sample->window_a_valid = (uint8_t)(sample->window_a >= ADC_SAMPLE_TOTAL_TICKS);
+    sample->window_b_valid = (uint8_t)(sample->window_b >= ADC_SAMPLE_TOTAL_TICKS);
+    sample->window_c_valid = (uint8_t)(sample->window_c >= ADC_SAMPLE_TOTAL_TICKS);
+//    sample->window_valid = current_window_is_valid(sample);
     sample->full_clarke = 1U;
     sample->reconstructed_phase = PMSM_PHASE_NONE;
 
@@ -134,13 +135,16 @@ void foc_current_sample_process(pmsm_t *pm)
         sample->full_clarke = 0U;
     }
 #if (CURRENT_RECONSTRUCTION_MODE == CURRENT_RECONSTRUCTION_MIN_WINDOW)
-    else
-    {
-        sample->reconstructed_phase = min_window_phase_get(sample);
-        sample->full_clarke = 0U;
-    }
+//    else
+//    {
+//		if(sample->window_a_valid == 0 || sample->window_b_valid == 0 || sample->window_c_valid == 0)
+//		{
+			sample->reconstructed_phase = min_window_phase_get(sample);
+			sample->full_clarke = 0U;
+//		}			
+//    }
 #endif
-
+//sample->full_clarke = 1U;
     current_phase_reconstruct(&pm->foc, sample->reconstructed_phase);
 }
 

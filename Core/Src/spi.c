@@ -7,14 +7,28 @@
   ******************************************************************************
   */
 /* USER CODE END Header */
+/* Includes ------------------------------------------------------------------*/
 #include "spi.h"
+
+/* USER CODE BEGIN 0 */
+
+/* USER CODE END 0 */
 
 SPI_HandleTypeDef hspi1;
 DMA_HandleTypeDef hdma_spi1_rx;
 DMA_HandleTypeDef hdma_spi1_tx;
 
+/* SPI1 init function */
 void MX_SPI1_Init(void)
 {
+
+  /* USER CODE BEGIN SPI1_Init 0 */
+
+  /* USER CODE END SPI1_Init 0 */
+
+  /* USER CODE BEGIN SPI1_Init 1 */
+
+  /* USER CODE END SPI1_Init 1 */
   hspi1.Instance = SPI1;
   hspi1.Init.Mode = SPI_MODE_MASTER;
   hspi1.Init.Direction = SPI_DIRECTION_2LINES;
@@ -33,17 +47,25 @@ void MX_SPI1_Init(void)
   {
     Error_Handler();
   }
+  /* USER CODE BEGIN SPI1_Init 2 */
+
+  /* USER CODE END SPI1_Init 2 */
+
 }
 
 void HAL_SPI_MspInit(SPI_HandleTypeDef* spiHandle)
 {
+
   GPIO_InitTypeDef GPIO_InitStruct = {0};
-
-  if (spiHandle->Instance == SPI1)
+  if(spiHandle->Instance==SPI1)
   {
-    __HAL_RCC_SPI1_CLK_ENABLE();
-    __HAL_RCC_GPIOB_CLK_ENABLE();
+  /* USER CODE BEGIN SPI1_MspInit 0 */
 
+  /* USER CODE END SPI1_MspInit 0 */
+    /* SPI1 clock enable */
+    __HAL_RCC_SPI1_CLK_ENABLE();
+
+    __HAL_RCC_GPIOB_CLK_ENABLE();
     /**SPI1 GPIO Configuration
     PB3     ------> SPI1_SCK
     PB4     ------> SPI1_MISO
@@ -56,7 +78,8 @@ void HAL_SPI_MspInit(SPI_HandleTypeDef* spiHandle)
     GPIO_InitStruct.Alternate = GPIO_AF5_SPI1;
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-    /* SPI1 RX DMA Init */
+    /* SPI1 DMA Init */
+    /* SPI1_RX Init */
     hdma_spi1_rx.Instance = DMA1_Channel3;
     hdma_spi1_rx.Init.Request = DMA_REQUEST_SPI1_RX;
     hdma_spi1_rx.Init.Direction = DMA_PERIPH_TO_MEMORY;
@@ -73,7 +96,7 @@ void HAL_SPI_MspInit(SPI_HandleTypeDef* spiHandle)
 
     __HAL_LINKDMA(spiHandle,hdmarx,hdma_spi1_rx);
 
-    /* SPI1 TX DMA Init */
+    /* SPI1_TX Init */
     hdma_spi1_tx.Instance = DMA1_Channel4;
     hdma_spi1_tx.Init.Request = DMA_REQUEST_SPI1_TX;
     hdma_spi1_tx.Init.Direction = DMA_MEMORY_TO_PERIPH;
@@ -90,19 +113,45 @@ void HAL_SPI_MspInit(SPI_HandleTypeDef* spiHandle)
 
     __HAL_LINKDMA(spiHandle,hdmatx,hdma_spi1_tx);
 
+    /* SPI1 interrupt Init */
     HAL_NVIC_SetPriority(SPI1_IRQn, 1, 0);
     HAL_NVIC_EnableIRQ(SPI1_IRQn);
+  /* USER CODE BEGIN SPI1_MspInit 1 */
+
+  /* USER CODE END SPI1_MspInit 1 */
   }
 }
 
 void HAL_SPI_MspDeInit(SPI_HandleTypeDef* spiHandle)
 {
-  if (spiHandle->Instance == SPI1)
+
+  if(spiHandle->Instance==SPI1)
   {
+  /* USER CODE BEGIN SPI1_MspDeInit 0 */
+
+  /* USER CODE END SPI1_MspDeInit 0 */
+    /* Peripheral clock disable */
     __HAL_RCC_SPI1_CLK_DISABLE();
+
+    /**SPI1 GPIO Configuration
+    PB3     ------> SPI1_SCK
+    PB4     ------> SPI1_MISO
+    PB5     ------> SPI1_MOSI
+    */
     HAL_GPIO_DeInit(GPIOB, SCK_Pin|MISO_Pin|MOSI_Pin);
+
+    /* SPI1 DMA DeInit */
     HAL_DMA_DeInit(spiHandle->hdmarx);
     HAL_DMA_DeInit(spiHandle->hdmatx);
+
+    /* SPI1 interrupt Deinit */
     HAL_NVIC_DisableIRQ(SPI1_IRQn);
+  /* USER CODE BEGIN SPI1_MspDeInit 1 */
+
+  /* USER CODE END SPI1_MspDeInit 1 */
   }
 }
+
+/* USER CODE BEGIN 1 */
+
+/* USER CODE END 1 */

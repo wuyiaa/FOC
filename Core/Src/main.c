@@ -32,6 +32,7 @@
 #include "encoder_zero_calibration.h"
 #include "key_control.h"
 #include "vofa.h"
+#include "voltage_sample.h"
 
 /* USER CODE END Includes */
 
@@ -113,6 +114,12 @@ int main(void)
     Error_Handler();
   }
 
+  /* Arm ADC2 voltage sampling before the shared TIM1 trigger starts. */
+  if (voltage_sample_start() != HAL_OK)
+  {
+    Error_Handler();
+  }
+
   if (HAL_ADCEx_InjectedStart_IT(&hadc1) != HAL_OK)
   {
     Error_Handler();
@@ -134,7 +141,7 @@ int main(void)
   }
 #endif
 
-  /* Measure one TIM1_CH4-to-ADC1 injected-sequence interval with DWT. */
+  /* Continuously measure TIM1_CH4-to-ADC1 callback intervals with DWT. */
   foc_adc_time_measure_arm(&pm);
 
   /* Initialize the non-blocking VOFA+ USB CDC stream. */
@@ -148,6 +155,7 @@ int main(void)
   {
     /* USER CODE END WHILE */
 
+    /* USER CODE BEGIN 3 */
     vofa_process();
     key_control_process();
 
@@ -174,8 +182,6 @@ int main(void)
       }
     }
 #endif
-
-    /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
 }

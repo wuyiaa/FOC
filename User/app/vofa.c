@@ -56,6 +56,11 @@ void vofa_usb_disconnected(void)
 
 static uint16_t vofa_packet_build(void)
 {
+    const uint32_t saved_primask = __get_PRIMASK();
+
+    /* Copy currents and diagnostics together, without an ADC ISR splitting
+       the frame across two control cycles. Restore IRQs before packing USB. */
+    __disable_irq();
     const float vofa_values[] =
     {
         pm.foc.i_a,                  /* CH0: phase A current (A) */
@@ -68,11 +73,11 @@ static uint16_t vofa_packet_build(void)
 //        pm.foc.i_b_ref,                  /* CH1: phase B current (A) */
 //        pm.foc.i_c_ref,  
 			pm.foc.i_q,
-			pm.foc.i_q_ref,
+//			pm.foc.i_q_ref,
 			pm.foc.i_d,			
-			pm.foc.i_d_ref,
-			pm.foc.u_d,
-			pm.foc.u_q,
+//			pm.foc.i_d_ref,
+//			pm.foc.u_d,
+//			pm.foc.u_q,
 			
 //			pm.foc.i_alpha,              /* CH5: alpha-axis current (A) */
 //			pm.foc.i_beta,               /* CH6: beta-axis current (A) */
@@ -83,9 +88,9 @@ static uint16_t vofa_packet_build(void)
 //						pm.adc.ia_off,
 //					pm.adc.ib_off,
 //					pm.adc.ic_off
-        (float)pm.svpwm.ccr1,        /* CH9: PWM compare 1 */
-        (float)pm.svpwm.ccr2,        /* CH10: PWM compare 2 */
-        (float)pm.svpwm.ccr3,        /* CH11: PWM compare 3 */
+//        (float)pm.svpwm.ccr1,        /* CH9: PWM compare 1 */
+//        (float)pm.svpwm.ccr2,        /* CH10: PWM compare 2 */
+//        (float)pm.svpwm.ccr3,        /* CH11: PWM compare 3 */
 //			
 //				pm.foc.mechanical_angle_rad, /* CH12: mechanical angle (rad) */
 //				pm.foc.electrical_angle_rad,
@@ -94,8 +99,24 @@ static uint16_t vofa_packet_build(void)
 //				foc_iq_pid.integral_output,
 //				foc_id_pid.p_output,
 //				foc_id_pid.integral_output
-				
-				pm.foc.i_a+pm.foc.i_b+pm.foc.i_c,
+
+        (float)pm.current_sample.window_a,       /* CH6: A low-side ticks */
+        (float)pm.current_sample.window_b,       /* CH7: B low-side ticks */
+        (float)pm.current_sample.window_c,       /* CH8: C low-side ticks */
+        (float)pm.current_sample.window_a_valid, /* CH9: A duration valid */
+        (float)pm.current_sample.window_b_valid, /* CH10: B duration valid */
+        (float)pm.current_sample.window_c_valid, /* CH11: C duration valid */
+        (float)pm.current_sample.reconstructed_phase, /* CH12: 0=none,1=A,2=B,3=C */
+        /* CH13: all measured sources retained AFTER reconstruction have
+           enough ON time. Exclude only the phase actually reconstructed.
+           This checks duration, not ADC trigger placement or accuracy. */
+        (float)(((pm.current_sample.window_a_valid != 0U) ||
+                 (pm.current_sample.reconstructed_phase == PMSM_PHASE_A)) &&
+                ((pm.current_sample.window_b_valid != 0U) ||
+                 (pm.current_sample.reconstructed_phase == PMSM_PHASE_B)) &&
+                ((pm.current_sample.window_c_valid != 0U) ||
+                 (pm.current_sample.reconstructed_phase == PMSM_PHASE_C)))
+//				pm.foc.i_a+pm.foc.i_b+pm.foc.i_c,
 //				/*У׼*/
 //				(float)pm.encoder_foc_sample.raw,
 //				(float)calibration.sampling,
@@ -108,6 +129,8 @@ static uint16_t vofa_packet_build(void)
     uint16_t i;
     uint16_t offset;
     uint16_t packet_size;
+
+    __set_PRIMASK(saved_primask);
 
     channel_count = (uint16_t)(sizeof(vofa_values) / sizeof(vofa_values[0]));
     if (channel_count > VOFA_MAX_CHANNEL_COUNT)

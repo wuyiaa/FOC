@@ -11,19 +11,22 @@
  * Keil Watch can edit the bandwidth and both parameter arrays at runtime.
  * Bandwidth changes recalculate Kp/Ki once; direct edits persist otherwise.
  */
+#define FOC_CURRENT_OUTPUT_UTILIZATION_INITIAL  0.9f
 #define FOC_CURRENT_OUTPUT_LIMIT_V \
-    (FOC_DC_BUS_VOLTAGE_V * FOC_CURRENT_OUTPUT_UTILIZATION * ONE_BY_SQRT3)
+    (FOC_DC_BUS_VOLTAGE_V * FOC_CURRENT_OUTPUT_UTILIZATION_INITIAL * ONE_BY_SQRT3)
 
 volatile float FOC_CURRENT_LOOP_BANDWIDTH_DEFAULT_HZ = 350.0f;
+volatile float FOC_CURRENT_OUTPUT_UTILIZATION = FOC_CURRENT_OUTPUT_UTILIZATION_INITIAL;
 static float applied_bandwidth_hz = -1.0f;
+static float applied_output_utilization = -1.0f;
 
 volatile float foc_id_pid_parameters[PID_PARAMETER_COUNT] =
 {
     0.0f, /* Kp is calculated from the live bandwidth during PID initialization. */
     0.0f, /* Ki is calculated at the same time. */
     FOC_CURRENT_KD_V_S_PER_A,
-    FOC_CURRENT_OUTPUT_LIMIT_V,
-    FOC_CURRENT_OUTPUT_LIMIT_V * FOC_CURRENT_INTEGRAL_LIMIT_RATIO,
+    9.8f,//FOC_CURRENT_OUTPUT_LIMIT_V,
+    5.4f,//FOC_CURRENT_OUTPUT_LIMIT_V * FOC_CURRENT_INTEGRAL_LIMIT_RATIO,
     FOC_CURRENT_DEADBAND_A
 };
 
@@ -32,8 +35,8 @@ volatile float foc_iq_pid_parameters[PID_PARAMETER_COUNT] =
     0.0f, /* Kp is calculated from the live bandwidth during PID initialization. */
     0.0f, /* Ki is calculated at the same time. */
     FOC_CURRENT_KD_V_S_PER_A,
-    FOC_CURRENT_OUTPUT_LIMIT_V,
-    FOC_CURRENT_OUTPUT_LIMIT_V * FOC_CURRENT_INTEGRAL_LIMIT_RATIO,
+    9.8f,//FOC_CURRENT_OUTPUT_LIMIT_V,
+    5.4f,//FOC_CURRENT_OUTPUT_LIMIT_V * FOC_CURRENT_INTEGRAL_LIMIT_RATIO,
     FOC_CURRENT_DEADBAND_A
 };
 
@@ -68,6 +71,7 @@ static void pid_load_parameters(pid_controller_t *pid,
 static void foc_current_pid_parameters_update(void)
 {
     const float bandwidth_hz = FOC_CURRENT_LOOP_BANDWIDTH_DEFAULT_HZ;
+    const float utilization = FOC_CURRENT_OUTPUT_UTILIZATION;
 
     if (isfinite(bandwidth_hz) && (bandwidth_hz >= 0.0f) &&
         (bandwidth_hz != applied_bandwidth_hz))
@@ -80,6 +84,20 @@ static void foc_current_pid_parameters_update(void)
         foc_iq_pid_parameters[0] = omega * FOC_MOTOR_LQ_H;
         foc_iq_pid_parameters[1] = omega * FOC_MOTOR_RS_OHM;
         applied_bandwidth_hz = bandwidth_hz;
+    }
+
+    /* Update only when the Watch variable changes, preserving direct array
+       edits otherwise. Measured VBUS is deliberately not used at this stage. */
+    if (isfinite(utilization) && (utilization >= 0.0f) &&
+        (utilization <= 1.0f) && (utilization != applied_output_utilization))
+    {
+        const float limit = 8.5f;//FOC_DC_BUS_VOLTAGE_V * utilization * ONE_BY_SQRT3;
+
+        foc_id_pid_parameters[3] = limit;
+        foc_iq_pid_parameters[3] = limit;
+        foc_id_pid_parameters[4] = limit * FOC_CURRENT_INTEGRAL_LIMIT_RATIO;
+        foc_iq_pid_parameters[4] = limit * FOC_CURRENT_INTEGRAL_LIMIT_RATIO;
+        applied_output_utilization = utilization;
     }
 
     /* Refresh gains/limits without resetting the controller history. */
