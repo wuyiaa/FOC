@@ -8,33 +8,37 @@
 /*
  * Parameter order: Kp, Ki, Kd, output limit, integral limit, deadband.
  * PID output/limits are in volts. Kp = 2*pi*fc*L, Ki = 2*pi*fc*Rs.
- * Edit motor_config.h to change the motor and current-loop parameters.
+ * Keil Watch can edit the bandwidth and both parameter arrays at runtime.
+ * Bandwidth changes recalculate Kp/Ki once; direct edits persist otherwise.
  */
 #define FOC_CURRENT_OUTPUT_LIMIT_V \
     (FOC_DC_BUS_VOLTAGE_V * FOC_CURRENT_OUTPUT_UTILIZATION * ONE_BY_SQRT3)
 
-static const float foc_id_pid_parameters[PID_PARAMETER_COUNT] =
+volatile float FOC_CURRENT_LOOP_BANDWIDTH_DEFAULT_HZ = 350.0f;
+static float applied_bandwidth_hz = -1.0f;
+
+volatile float foc_id_pid_parameters[PID_PARAMETER_COUNT] =
 {
-    TWO_PI * FOC_CURRENT_LOOP_BANDWIDTH_HZ * FOC_MOTOR_LD_H,
-    TWO_PI * FOC_CURRENT_LOOP_BANDWIDTH_HZ * FOC_MOTOR_RS_OHM,
+    0.0f, /* Kp is calculated from the live bandwidth during PID initialization. */
+    0.0f, /* Ki is calculated at the same time. */
     FOC_CURRENT_KD_V_S_PER_A,
     FOC_CURRENT_OUTPUT_LIMIT_V,
     FOC_CURRENT_OUTPUT_LIMIT_V * FOC_CURRENT_INTEGRAL_LIMIT_RATIO,
     FOC_CURRENT_DEADBAND_A
 };
 
-static const float foc_iq_pid_parameters[PID_PARAMETER_COUNT] =
+volatile float foc_iq_pid_parameters[PID_PARAMETER_COUNT] =
 {
-    TWO_PI * FOC_CURRENT_LOOP_BANDWIDTH_HZ * FOC_MOTOR_LQ_H,
-    TWO_PI * FOC_CURRENT_LOOP_BANDWIDTH_HZ * FOC_MOTOR_RS_OHM,
+    0.0f, /* Kp is calculated from the live bandwidth during PID initialization. */
+    0.0f, /* Ki is calculated at the same time. */
     FOC_CURRENT_KD_V_S_PER_A,
     FOC_CURRENT_OUTPUT_LIMIT_V,
     FOC_CURRENT_OUTPUT_LIMIT_V * FOC_CURRENT_INTEGRAL_LIMIT_RATIO,
     FOC_CURRENT_DEADBAND_A
 };
 
-static pid_controller_t foc_id_pid;
-static pid_controller_t foc_iq_pid;
+pid_controller_t foc_id_pid;
+pid_controller_t foc_iq_pid;
 
 static float pid_clamp(float value, float limit)
 {
@@ -50,19 +54,47 @@ static float pid_clamp(float value, float limit)
     return value;
 }
 
-void pid_init(pid_controller_t *pid, const float parameters[PID_PARAMETER_COUNT])
+static void pid_load_parameters(pid_controller_t *pid,
+                                const volatile float parameters[PID_PARAMETER_COUNT])
 {
-    if ((pid == NULL) || (parameters == NULL))
-    {
-        return;
-    }
-
     pid->kp = parameters[0];
     pid->ki = parameters[1];
     pid->kd = parameters[2];
     pid->output_limit = fabsf(parameters[3]);
     pid->integral_limit = fabsf(parameters[4]);
     pid->deadband = fabsf(parameters[5]);
+}
+
+static void foc_current_pid_parameters_update(void)
+{
+    const float bandwidth_hz = FOC_CURRENT_LOOP_BANDWIDTH_DEFAULT_HZ;
+
+    if (isfinite(bandwidth_hz) && (bandwidth_hz >= 0.0f) &&
+        (bandwidth_hz != applied_bandwidth_hz))
+    {
+        const float omega = TWO_PI * bandwidth_hz;
+
+        foc_id_pid_parameters[0] = omega * FOC_MOTOR_LD_H;
+        /* Preserve the existing D-axis integral-off / Q-axis integral-on tuning. */
+        foc_id_pid_parameters[1] = omega * FOC_MOTOR_RS_OHM * 0.0f;
+        foc_iq_pid_parameters[0] = omega * FOC_MOTOR_LQ_H;
+        foc_iq_pid_parameters[1] = omega * FOC_MOTOR_RS_OHM;
+        applied_bandwidth_hz = bandwidth_hz;
+    }
+
+    /* Refresh gains/limits without resetting the controller history. */
+    pid_load_parameters(&foc_id_pid, foc_id_pid_parameters);
+    pid_load_parameters(&foc_iq_pid, foc_iq_pid_parameters);
+}
+
+void pid_init(pid_controller_t *pid, const volatile float parameters[PID_PARAMETER_COUNT])
+{
+    if ((pid == NULL) || (parameters == NULL))
+    {
+        return;
+    }
+
+    pid_load_parameters(pid, parameters);
     pid->integral_output = 0.0f;
     pid->previous_error = 0.0f;
     pid->output = 0.0f;
@@ -107,6 +139,7 @@ float pid_calculate(pid_controller_t *pid,
     }
 
     pid->previous_error = error;
+		pid->p_output = proportional;
     pid->output = pid_clamp(
         proportional + pid->integral_output + derivative,
         pid->output_limit);
@@ -118,6 +151,7 @@ void foc_current_pid_init(void)
 {
     pid_init(&foc_id_pid, foc_id_pid_parameters);
     pid_init(&foc_iq_pid, foc_iq_pid_parameters);
+    foc_current_pid_parameters_update();
 }
 
 void foc_current_pid_update(pmsm_t *pm, float dt)
@@ -129,6 +163,8 @@ void foc_current_pid_update(pmsm_t *pm, float dt)
     {
         return;
     }
+
+    foc_current_pid_parameters_update();
 
     pm->foc.u_d = pid_calculate(&foc_id_pid,
                                 pm->foc.i_d_ref,

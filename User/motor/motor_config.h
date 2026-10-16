@@ -8,10 +8,11 @@
 #define FOC_MOTOR_POLE_PAIRS                   11U
 
 /* Current-loop tuning and voltage limits. */
-#define FOC_CURRENT_LOOP_BANDWIDTH_HZ          250.0f
+/* Live tuning variable (Hz), defined in pid.c. Edit this in Keil Watch. */
+extern volatile float FOC_CURRENT_LOOP_BANDWIDTH_DEFAULT_HZ;
 #define FOC_DC_BUS_VOLTAGE_V                   24.0f
 #define FOC_CURRENT_OUTPUT_UTILIZATION         0.95f
-#define FOC_CURRENT_INTEGRAL_LIMIT_RATIO       0.5f
+#define FOC_CURRENT_INTEGRAL_LIMIT_RATIO       1.0f
 #define FOC_CURRENT_KD_V_S_PER_A                0.0f
 #define FOC_CURRENT_DEADBAND_A                  0.0f
 
