@@ -114,7 +114,7 @@ int main(void)
     Error_Handler();
   }
 
-  /* Arm ADC2 voltage sampling before the shared TIM1 trigger starts. */
+  /* Enable the ADC2 injected slave (IC/VBUS) and regular DMA before ADC1. */
   if (voltage_sample_start() != HAL_OK)
   {
     Error_Handler();
@@ -156,6 +156,9 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    voltage_sample_transform_update(pm.foc.electrical_angle_rad,
+                                    calibration.phase_reversed,
+                                    pm.encoder_foc_sample.valid);
     vofa_process();
     key_control_process();
 

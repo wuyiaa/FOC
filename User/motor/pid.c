@@ -11,7 +11,7 @@
  * Keil Watch can edit the bandwidth and both parameter arrays at runtime.
  * Bandwidth changes recalculate Kp/Ki once; direct edits persist otherwise.
  */
-#define FOC_CURRENT_OUTPUT_UTILIZATION_INITIAL  0.9f
+#define FOC_CURRENT_OUTPUT_UTILIZATION_INITIAL  0.85f
 #define FOC_CURRENT_OUTPUT_LIMIT_V \
     (FOC_DC_BUS_VOLTAGE_V * FOC_CURRENT_OUTPUT_UTILIZATION_INITIAL * ONE_BY_SQRT3)
 
@@ -80,7 +80,7 @@ static void foc_current_pid_parameters_update(void)
 
         foc_id_pid_parameters[0] = omega * FOC_MOTOR_LD_H;
         /* Preserve the existing D-axis integral-off / Q-axis integral-on tuning. */
-        foc_id_pid_parameters[1] = omega * FOC_MOTOR_RS_OHM * 0.0f;
+        foc_id_pid_parameters[1] = omega * FOC_MOTOR_RS_OHM;
         foc_iq_pid_parameters[0] = omega * FOC_MOTOR_LQ_H;
         foc_iq_pid_parameters[1] = omega * FOC_MOTOR_RS_OHM;
         applied_bandwidth_hz = bandwidth_hz;
@@ -91,7 +91,7 @@ static void foc_current_pid_parameters_update(void)
     if (isfinite(utilization) && (utilization >= 0.0f) &&
         (utilization <= 1.0f) && (utilization != applied_output_utilization))
     {
-        const float limit = 8.5f;//FOC_DC_BUS_VOLTAGE_V * utilization * ONE_BY_SQRT3;
+        const float limit = FOC_DC_BUS_VOLTAGE_V * utilization * ONE_BY_SQRT3;
 
         foc_id_pid_parameters[3] = limit;
         foc_iq_pid_parameters[3] = limit;
@@ -184,11 +184,11 @@ void foc_current_pid_update(pmsm_t *pm, float dt)
 
     foc_current_pid_parameters_update();
 
-    pm->foc.u_d = pid_calculate(&foc_id_pid,
+    pm->foc.u_d = -pid_calculate(&foc_id_pid,
                                 pm->foc.i_d_ref,
                                 pm->foc.i_d,
                                 dt);
-    pm->foc.u_q = pid_calculate(&foc_iq_pid,
+    pm->foc.u_q = -pid_calculate(&foc_iq_pid,
                                 pm->foc.i_q_ref,
                                 pm->foc.i_q,
                                 dt);

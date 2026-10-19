@@ -157,9 +157,9 @@ void foc_get_curr_off(void)
     for (i = 0U; i < 1000; i++)
     {
         HAL_Delay(1U);
-        sum_a += (float)ADC1->JDR3;
+        sum_a += (float)ADC1->JDR1;
         sum_b += (float)ADC1->JDR2;
-        sum_c += (float)ADC1->JDR1;
+        sum_c += (float)ADC2->JDR1;
 //			  sum_a += (float)ADC1->JDR2;
 //        sum_b += (float)ADC1->JDR1;
 //        sum_c += (float)ADC1->JDR3;
@@ -173,11 +173,13 @@ void foc_get_curr_off(void)
 
 void foc_adc_sample(pmsm_t *pm)
 {
+    /* Physical IA/IB: ADC1 ranks 1/2; IC: ADC2 rank 1.
+       Preserve the calibrated logical A/C swap and its matching offsets. */
     pm->adc.ia = (calibration.phase_reversed != 0U) ?
-                 (uint16_t)ADC1->JDR1 : (uint16_t)ADC1->JDR3;
+                 (uint16_t)ADC2->JDR1 : (uint16_t)ADC1->JDR1;
     pm->adc.ib = (uint16_t)ADC1->JDR2;
     pm->adc.ic = (calibration.phase_reversed != 0U) ?
-                 (uint16_t)ADC1->JDR3 : (uint16_t)ADC1->JDR1;
+                 (uint16_t)ADC1->JDR1 : (uint16_t)ADC2->JDR1;
 //	    pm->adc.ia = (uint16_t)ADC1->JDR2;
 //    pm->adc.ib = (uint16_t)ADC1->JDR1;
 //    pm->adc.ic = (uint16_t)ADC1->JDR3;

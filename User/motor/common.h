@@ -162,6 +162,12 @@ typedef struct
     uint8_t window_valid; /* 1 only when all three duration checks pass. */
     uint8_t full_clarke;
 
+    /* Calibrated phase currents before reconstruction, from this ADC sequence (A). */
+    float i_a_before_reconstruction;
+    float i_b_before_reconstruction;
+    float i_c_before_reconstruction;
+    float i_sum_before_reconstruction;
+
     pmsm_phase_t reconstructed_phase;
 } pmsm_current_sample_t;
 

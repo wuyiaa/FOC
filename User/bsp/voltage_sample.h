@@ -26,14 +26,28 @@ typedef struct
     float vc_v;
     float vbus_v;
 
+    /* Estimated neutral and winding voltages for physical MA/MB/MC (V). */
+    float v_neutral_v;
+    float v_an_v;
+    float v_bn_v;
+    float v_cn_v;
+
+    /* Clarke/Park results in the calibrated logical A/B/C frame (V). */
+    float v_alpha;
+    float v_beta;
+    float v_d;
+    float v_q;
+
     /* Publication counts, not the total number of hardware conversions. */
     uint32_t phase_update_count;
     uint32_t bus_update_count;
+    uint32_t transform_update_count;
     uint32_t bus_not_ready_count;
     uint32_t adc_error_code;
     uint8_t phase_valid;
     uint8_t bus_valid;
     uint8_t bus_fresh;
+    uint8_t transform_valid;
 } voltage_sample_t;
 
 /* Keil Watch: voltage_sample. All voltage fields are unfiltered volts. */
@@ -43,5 +57,9 @@ extern volatile voltage_sample_t voltage_sample;
 HAL_StatusTypeDef voltage_sample_start(void);
 /* Call only from the ADC1 injected-sequence-complete callback. */
 void voltage_sample_update(void);
+/* Estimate physical winding voltages, then transform to logical alpha/beta/dq. */
+void voltage_sample_transform_update(float electrical_angle_rad,
+                                     uint8_t phase_reversed,
+                                     uint8_t angle_valid);
 
 #endif /* USER_BSP_VOLTAGE_SAMPLE_H */

@@ -106,6 +106,16 @@ static void current_phase_reconstruct(pmsm_foc_t *foc, pmsm_phase_t phase)
 void foc_current_sample_process(pmsm_t *pm)
 {
     pmsm_current_sample_t *sample = &pm->current_sample;
+
+    /* Snapshot before any phase is replaced; VOFA copies this together
+       with the selected reconstruction phase under its existing IRQ lock. */
+    sample->i_a_before_reconstruction = pm->foc.i_a;
+    sample->i_b_before_reconstruction = pm->foc.i_b;
+    sample->i_c_before_reconstruction = pm->foc.i_c;
+    sample->i_sum_before_reconstruction =
+        sample->i_a_before_reconstruction +
+        sample->i_b_before_reconstruction +
+        sample->i_c_before_reconstruction;
 	
     sample->pwm_cmp_a = (uint16_t)TIM1->CCR1;
     sample->pwm_cmp_b = (uint16_t)TIM1->CCR2;
@@ -144,7 +154,7 @@ void foc_current_sample_process(pmsm_t *pm)
 //		}			
 //    }
 #endif
-//sample->full_clarke = 1U;
+sample->full_clarke = 1U;
     current_phase_reconstruct(&pm->foc, sample->reconstructed_phase);
 }
 

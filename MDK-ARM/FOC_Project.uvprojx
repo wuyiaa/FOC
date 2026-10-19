@@ -637,6 +637,16 @@
           <GroupName>User/bsp</GroupName>
           <Files>
             <File>
+              <FileName>pwm_capture.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../User/bsp/pwm_capture.c</FilePath>
+            </File>
+            <File>
+              <FileName>pwm_capture.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../User/bsp/pwm_capture.h</FilePath>
+            </File>
+            <File>
               <FileName>voltage_sample.c</FileName>
               <FileType>1</FileType>
               <FilePath>../User/bsp/voltage_sample.c</FilePath>
