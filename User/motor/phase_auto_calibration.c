@@ -71,8 +71,8 @@ void foc_phase_auto_calibration_step(pmsm_t *pm, float v_dc, float v_min)
         int32_t delta;
         int32_t physical_delta;
 
-        pm->foc.u_d = 0.0f;
-        pm->foc.u_q = MOTOR_CALIBRATION_UQ_V;
+        pm->foc.Ud_ref = 0.0f;
+        pm->foc.Uq_ref = MOTOR_CALIBRATION_UQ_V;
         inverse_park_transform(pm);
         svpwm_calc(pm, v_dc, v_min);
 
@@ -136,6 +136,7 @@ void foc_phase_auto_calibration_step(pmsm_t *pm, float v_dc, float v_min)
         if (physical_delta > 0)
         {
             /* Keep the confirmed phase/direction and refresh zero once more. */
+            calibration.current_polarity_required = 1U;
             calibration.state = MOTOR_CAL_STATE_FINAL_ALIGN;
             calibration.started = 0U;
             calibration.sampling = 0U;

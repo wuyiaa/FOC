@@ -109,10 +109,10 @@ void pmsm_board_init(void)
      pm.board.i_ratio = pm.board.v_ref / (pm.board.v_adc* pm.board.i_res* pm.board.i_op);
     pm.board.i_max = pm.board.v_adc * pm.board.i_ratio * 0.5f;
 //	  float ia_positive_max =
-//      (4095.0f - pm.adc.ia_off) * pm.board.i_ratio;
+//      (4095.0f - pm.foc.ia.offset) * pm.board.i_ratio;
 
 //  float ia_negative_max =
-//      pm.adc.ia_off * pm.board.i_ratio;
+//      pm.foc.ia.offset * pm.board.i_ratio;
 
 }
 
@@ -128,18 +128,26 @@ void pmsm_motor_init(void)
 void pmsm_init(void)
 {
     memset(&pm, 0, sizeof(pm));
+    calibration.current_direction = 1;
     calibration.phase_reversed = MOTOR_PHASE_REVERSED_DEFAULT;
     calibration.electrical_direction = MOTOR_ELECTRICAL_DIRECTION_DEFAULT;
 #if (FOC_PHASE_AUTO_CALIBRATION_MODE != 0U)
+    (void)encoder_zero_flash_load(&calibration);
     foc_encoder_zero_calibration_init();
 #elif (FOC_ENCODER_ZERO_CALIBRATION_MODE != 0U)
-    /* Keep the last selected phase order/direction while refreshing only zero. */
+    /* Load the saved zero; fixed phase/direction are selected below. */
     (void)encoder_zero_flash_load(&calibration);
     foc_encoder_zero_calibration_init();
 #else
     /* Restore the last calibrated offset for normal FOC operation. */
     (void)encoder_zero_flash_load(&calibration);
 #endif
+//#if (FOC_PHASE_AUTO_CALIBRATION_MODE == 0U)
+//    /* Keep the Flash zero offset, but use the selected phase order and angle
+//       direction even if the saved record contains older values. */
+//    calibration.phase_reversed = MOTOR_PHASE_REVERSED_DEFAULT;
+//    calibration.electrical_direction = MOTOR_ELECTRICAL_DIRECTION_DEFAULT;
+//#endif
     pmsm_board_init();
     pmsm_motor_init();
     foc_current_pid_init();
@@ -159,46 +167,33 @@ void foc_get_curr_off(void)
         HAL_Delay(1U);
         sum_a += (float)ADC1->JDR1;
         sum_b += (float)ADC1->JDR2;
-        sum_c += (float)ADC2->JDR1;
+        sum_c += (float)ADC1->JDR3;
 //			  sum_a += (float)ADC1->JDR2;
 //        sum_b += (float)ADC1->JDR1;
 //        sum_c += (float)ADC1->JDR3;
     }
 
-    pm.adc.ia_off = sum_a * 0.001f;
-    pm.adc.ib_off = sum_b * 0.001f;
-    pm.adc.ic_off = sum_c * 0.001f;
+    pm.foc.ia.offset = sum_a * 0.001f;
+    pm.foc.ib.offset = sum_b * 0.001f;
+    pm.foc.ic.offset = sum_c * 0.001f;
     pm.adc.offset_ready = 1U;
+}
+
+static void phase_current_convert(pmsm_phase_current_t *current, float ratio,
+                                  int8_t direction)
+{
+    current->with_offset = (float)current->raw * ratio;
+    current->nonrecon = ((float)current->raw - current->offset) * ratio *
+                        (float)direction;
+    current->reconstructed = current->nonrecon;
 }
 
 void foc_adc_sample(pmsm_t *pm)
 {
-    /* Physical IA/IB: ADC1 ranks 1/2; IC: ADC2 rank 1.
-       Preserve the calibrated logical A/C swap and its matching offsets. */
-    pm->adc.ia = (calibration.phase_reversed != 0U) ?
-                 (uint16_t)ADC2->JDR1 : (uint16_t)ADC1->JDR1;
-    pm->adc.ib = (uint16_t)ADC1->JDR2;
-    pm->adc.ic = (calibration.phase_reversed != 0U) ?
-                 (uint16_t)ADC1->JDR1 : (uint16_t)ADC2->JDR1;
-//	    pm->adc.ia = (uint16_t)ADC1->JDR2;
-//    pm->adc.ib = (uint16_t)ADC1->JDR1;
-//    pm->adc.ic = (uint16_t)ADC1->JDR3;
-
-    pm->foc.i_a = ((float)pm->adc.ia -
-                   ((calibration.phase_reversed != 0U) ?
-                    pm->adc.ic_off : pm->adc.ia_off)) * pm->board.i_ratio;
-    pm->foc.i_b = ((float)pm->adc.ib - pm->adc.ib_off) * pm->board.i_ratio;
-    pm->foc.i_c = ((float)pm->adc.ic -
-                   ((calibration.phase_reversed != 0U) ?
-                    pm->adc.ia_off : pm->adc.ic_off)) * pm->board.i_ratio;
-//		
-		
-		
-//		 pm->adc.ia = (uint16_t)ADC1->JDR3;
-//    pm->adc.ib = (uint16_t)ADC1->JDR2;
-//    pm->adc.ic = (uint16_t)ADC1->JDR1;
-
-//    pm->foc.i_a = ((float)pm->adc.ia - pm->adc.ia_off) * pm->board.i_ratio;
-//    pm->foc.i_b = ((float)pm->adc.ib - pm->adc.ib_off) * pm->board.i_ratio;
-//    pm->foc.i_c = ((float)pm->adc.ic - pm->adc.ic_off) * pm->board.i_ratio;
+    pm->foc.ia.raw = (uint16_t)ADC1->JDR1;
+    pm->foc.ib.raw = (uint16_t)ADC1->JDR2;
+    pm->foc.ic.raw = (uint16_t)ADC1->JDR3;
+    phase_current_convert(&pm->foc.ia, pm->board.i_ratio, calibration.current_direction);
+    phase_current_convert(&pm->foc.ib, pm->board.i_ratio, calibration.current_direction);
+    phase_current_convert(&pm->foc.ic, pm->board.i_ratio, calibration.current_direction);
 }

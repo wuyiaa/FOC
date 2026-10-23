@@ -14,7 +14,7 @@ extern volatile float FOC_CURRENT_LOOP_BANDWIDTH_DEFAULT_HZ;
 /* Live limit margin, defined in pid.c; accepted range: 0.0f to 1.0f.
    The bus voltage remains fixed until measured voltages are validated. */
 extern volatile float FOC_CURRENT_OUTPUT_UTILIZATION;
-#define FOC_CURRENT_INTEGRAL_LIMIT_RATIO       1.0f
+#define FOC_CURRENT_INTEGRAL_LIMIT_RATIO       0.5f
 #define FOC_CURRENT_KD_V_S_PER_A                0.0f
 #define FOC_CURRENT_DEADBAND_A                  0.0f
 
@@ -26,7 +26,7 @@ extern volatile float FOC_CURRENT_OUTPUT_UTILIZATION;
 /* Existing 321 wiring uses an effective positive angle after the old
    MOTOR_MECHANICAL_DRV and sin(-angle) signs cancel. */
 #define MOTOR_PHASE_REVERSED_DEFAULT             1U //1--321œ‡–Ú 0--123œ‡–Ú
-#define MOTOR_ELECTRICAL_DIRECTION_DEFAULT       1	//1--+theta  0--(-theta)
+#define MOTOR_ELECTRICAL_DIRECTION_DEFAULT       1	//1--+theta  -1--(-theta)
 
 /* Automatic phase/direction calibration, enabled by the calibration mode. */
 #define MOTOR_CALIBRATION_UQ_V                    5.0f

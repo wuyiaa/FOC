@@ -1,4 +1,5 @@
 #include "vofa.h"
+#include "dwt_time.h"
 
 #include "common.h"
 #include "encoder_zero_calibration.h"
@@ -12,7 +13,7 @@
 
 extern USBD_HandleTypeDef hUsbDeviceFS;
 
-#define VOFA_SEND_PERIOD_US       50U
+#define VOFA_SEND_PERIOD_US       200U
 #define VOFA_SEND_PERIOD_CYCLES \
     ((DWT_CPU_FREQ_HZ / 1000000UL) * VOFA_SEND_PERIOD_US)
 #define VOFA_HOST_SETTLE_TIME_MS  10U
@@ -20,7 +21,7 @@ extern USBD_HandleTypeDef hUsbDeviceFS;
 #define VOFA_TX_TIMEOUT_CYCLES \
     ((DWT_CPU_FREQ_HZ / 1000UL) * VOFA_TX_TIMEOUT_MS)
 #define VOFA_JUSTFLOAT_TAIL_SIZE  4U
-#define VOFA_MAX_CHANNEL_COUNT    18U
+#define VOFA_MAX_CHANNEL_COUNT    24U
 
 /*
  * Edit vofa_values[] in vofa_packet_build() to change the channel list/order.
@@ -55,8 +56,40 @@ static uint8_t vofa_session_active;
 static uint8_t vofa_pwm_auto_pending = 1U;
 static uint16_t vofa_pwm_packet_samples;
 
+/* Successful USB submissions, not host receipt or ADC sample timestamps. */
+volatile float vofa_send_interval_us;
+volatile float vofa_send_frequency_hz;
+static uint32_t vofa_send_time_last;
+static uint32_t vofa_send_tick_last;
+static uint8_t vofa_send_time_valid;
+
+static void vofa_send_time_update(void)
+{
+    const uint32_t now_tick = HAL_GetTick();
+    float dt;
+    /* Reject long idle gaps before the 32-bit DWT counter can wrap fully. */
+    if ((vofa_send_time_valid == 0U) ||
+        ((uint32_t)(now_tick - vofa_send_tick_last) >= 20000U))
+    {
+        vofa_send_time_last = DWT->CYCCNT;
+        vofa_send_interval_us = 0.0f;
+        vofa_send_frequency_hz = 0.0f;
+        vofa_send_time_valid = 1U;
+    }
+    else
+    {
+        dt = DWT_GetDeltaT(&vofa_send_time_last);
+        vofa_send_interval_us = dt * 1000000.0f;
+        vofa_send_frequency_hz = (dt > 0.0f) ? 1.0f / dt : 0.0f;
+    }
+    vofa_send_tick_last = now_tick;
+}
+
 static void vofa_pwm_reset(void)
 {
+    vofa_send_time_valid = 0U;
+    vofa_send_interval_us = 0.0f;
+    vofa_send_frequency_hz = 0.0f;
     pwm_capture_cancel();
     vofa_pwm_sent_samples = 0U;
     vofa_pwm_packet_samples = 0U;
@@ -90,56 +123,93 @@ static uint16_t vofa_packet_build(void)
     /* Copy currents and diagnostics together, without an ADC ISR splitting
        the frame across two control cycles. Restore IRQs before packing USB. */
     __disable_irq();
+    /* Nearby reads, not a hardware-synchronized CNT/GPIO capture.
+       LIN1/2/3 are physical PB13/14/15 driver-input levels. */
+    const uint32_t low_side_levels = GPIOB->IDR;
     const float vofa_values[] =
     {
-        pm.foc.i_a,                  /* CH0: phase A current (A) */
-        pm.foc.i_b,                  /* CH1: phase B current (A) */
-        pm.foc.i_c,                  /* CH2: phase C current (A) */
-//			voltage_sample.v_an_v,
-//			voltage_sample.v_bn_v,
-//			voltage_sample.v_cn_v,
-//			voltage_sample.vbus_v,
-//			voltage_sample.v_alpha,
-//			voltage_sample.v_beta,
-			voltage_sample.v_q,
-			voltage_sample.v_d,
-			//        pm.foc.u_alpha,                  /* CH3: d-axis current (A) */
-//        pm.foc.u_beta,                  /* CH4: q-axis current (A) */
-//			pm.foc.i_a_ref,                  /* CH0: phase A current (A) */
-//        pm.foc.i_b_ref,                  /* CH1: phase B current (A) */
-//        pm.foc.i_c_ref,  
-			pm.foc.i_q,
-//			pm.foc.i_q_ref,
-			pm.foc.i_d,			
-//			pm.foc.i_d_ref,
-			pm.foc.u_d,
-			pm.foc.u_q,
+			/*反馈相电流*/
+//		    pm.foc.ia.nonrecon,   
+//        pm.foc.ib.nonrecon,   
+//        pm.foc.ic.nonrecon,   
+//        pm.foc.ia.reconstructed,                  /* CH0: phase A current (A) */
+//        pm.foc.ib.reconstructed,                  /* CH1: phase B current (A) */
+//        pm.foc.ic.reconstructed,                  /* CH2: phase C current (A) */
 			
 //			pm.foc.i_alpha,              /* CH5: alpha-axis current (A) */
 //			pm.foc.i_beta,               /* CH6: beta-axis current (A) */
-
-//			(float)ADC1->JDR1,
+			
+//				pm.foc.iq_fdb,
+//				pm.foc.id_fdb,		
+			
+			/*目标相电流*/
+//				pm.foc.iq_ref,	
+//				pm.foc.id_ref,
+			
+//				pm.foc.i_a_ref,                  /* CH0: phase A current (A) */
+//        pm.foc.i_b_ref,                  /* CH1: phase B current (A) */
+//        pm.foc.i_c_ref,  
+			
+			/*相电流偏移*/
+//				(float)ADC1->JDR1,
 //				(float)ADC1->JDR2,
-//					(float)ADC1->JDR3,
-//						pm.adc.ia_off,
-//					pm.adc.ib_off,
-//					pm.adc.ic_off
+//				(float)ADC1->JDR3,
+//				 pm.foc.ia.offset,
+//				 pm.foc.ib.offset,
+//				 pm.foc.ic.offset,
+
+				/*电流采样开关管*/
+        (float)TIM1->CNT,          
+        (float)((low_side_levels & LIN1_Pin) != 0U), 
+        (float)((low_side_levels & LIN2_Pin) != 0U), 
+        (float)((low_side_levels & LIN3_Pin) != 0U), 
+					
+//			/*反馈相电压*/
+//			voltage_sample.U_ng,  /* CH13: estimated motor neutral (V) */
+//			voltage_sample.Uan,
+//			voltage_sample.Ubn,
+//			voltage_sample.Ucn,
+//			voltage_sample.vbus_v,
+//			/*反馈端电压*/
+//			voltage_sample.Uag.value,
+//			voltage_sample.Ubg.value,
+//			voltage_sample.Ucg.value,
+////			
+//			voltage_sample.Uag.average,   
+//      voltage_sample.Ubg.average,   
+//      voltage_sample.Ucg.average,
+			
+//			voltage_sample.Ualpha_fdb,
+//			voltage_sample.Ubeta_fdb,
+
+//			voltage_sample.Uq_fdb,
+//			voltage_sample.Ud_fdb,
+			
+			/*目标相电压*/
+//			pm.foc.u_alpha,                 
+//      pm.foc.u_beta,                  
+
+//				pm.foc.Ud_ref,
+//				pm.foc.Uq_ref,
+			
+//			/*马鞍波*/
 //        (float)pm.svpwm.ccr1,        /* CH9: PWM compare 1 */
 //        (float)pm.svpwm.ccr2,        /* CH10: PWM compare 2 */
 //        (float)pm.svpwm.ccr3,        /* CH11: PWM compare 3 */
-//			
-//				pm.foc.mechanical_angle_rad, /* CH12: mechanical angle (rad) */
+
+			/*电机角度*/		
+//				pm.foc.mechanical_angle_rad,
 //				pm.foc.electrical_angle_rad,
+			/*电机角速度*/
 			pm.speed.mechanical_rad_s,   /* CH12: mechanical speed (rad/s) */
-			voltage_sample.v_neutral_v,  /* CH13: estimated motor neutral (V) */
-			voltage_sample.v_an_v,       /* CH14: physical MA to neutral (V) */
-			voltage_sample.v_bn_v,       /* CH15: physical MB to neutral (V) */
-			voltage_sample.v_cn_v,       /* CH16: physical MC to neutral (V) */
-//			foc_iq_pid.p_output,
+
+				/*电流环*/
+//				foc_iq_pid.p_output,
 //				foc_iq_pid.integral_output,
 //				foc_id_pid.p_output,
 //				foc_id_pid.integral_output
 
+				/*电流采样及其重构*/
 //        (float)pm.current_sample.window_a,       /* CH6: A low-side ticks */
 //        (float)pm.current_sample.window_b,       /* CH7: B low-side ticks */
 //        (float)pm.current_sample.window_c,       /* CH8: C low-side ticks */
@@ -156,12 +226,13 @@ static uint16_t vofa_packet_build(void)
 //							 (pm.current_sample.reconstructed_phase == PMSM_PHASE_B)) &&
 //							((pm.current_sample.window_c_valid != 0U) ||
 //							 (pm.current_sample.reconstructed_phase == PMSM_PHASE_C))),
-//        pm.current_sample.i_a_before_reconstruction,   /* CH14: A before reconstruction (A) */
-//        pm.current_sample.i_b_before_reconstruction,   /* CH15: B before reconstruction (A) */
-//        pm.current_sample.i_c_before_reconstruction,   /* CH16: C before reconstruction (A) */
+//        pm.foc.ia.nonrecon,   /* CH14: A before reconstruction (A) */
+//        pm.foc.ib.nonrecon,   /* CH15: B before reconstruction (A) */
+//        pm.foc.ic.nonrecon,   /* CH16: C before reconstruction (A) */
 //        pm.current_sample.i_sum_before_reconstruction /* CH17: A+B+C before reconstruction (A) */
-//				pm.foc.i_a+pm.foc.i_b+pm.foc.i_c,
-//				/*У׼*/
+//				pm.foc.ia.reconstructed+pm.foc.ib.reconstructed+pm.foc.ic.reconstructed,
+
+//				/*电机角度零点偏移采样*/
 //				(float)pm.encoder_foc_sample.raw,
 //				(float)calibration.sampling,
 //				(float)calibration.done,
@@ -263,9 +334,9 @@ static uint16_t vofa_pwm_packet_build(uint16_t *sample_count)
             (float)((pins >> 14U) & 1U), /* CH1: physical LIN2 / PB14 */
             (float)((pins >> 15U) & 1U), /* CH2: physical LIN3 / PB15 */
             /* Live at replay time, NOT sampled together with the GPIOs. */
-            pm.foc.i_a,                 /* CH3: live phase A current (A) */
-            pm.foc.i_b,                 /* CH4: live phase B current (A) */
-            pm.foc.i_c,                 /* CH5: live phase C current (A) */
+            pm.foc.ia.reconstructed,                 /* CH3: live phase A current (A) */
+            pm.foc.ib.reconstructed,                 /* CH4: live phase B current (A) */
+            pm.foc.ic.reconstructed,                 /* CH5: live phase C current (A) */
             (float)pwm_capture.completed_count, /* CH6: capture ID */
             (float)index,               /* CH7: point in record, 0..3999 */
         };
@@ -305,6 +376,7 @@ void vofa_process(void)
     {
         return;
     }
+    /* Advance the interval even if USB is busy and this attempt is skipped. */
     vofa_last_send_cycle = now_cycle;
 
     /* USB deinit can free pClassData. Protect both the check and all class
@@ -406,6 +478,7 @@ void vofa_process(void)
         vofa_tx_start_cycle = now_cycle;
         if (CDC_Transmit_FS(vofa_tx_buffer, packet_size) == USBD_OK)
         {
+            vofa_send_time_update();
             vofa_pwm_packet_samples = capture_samples;
         }
     }

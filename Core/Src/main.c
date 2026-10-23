@@ -114,7 +114,7 @@ int main(void)
     Error_Handler();
   }
 
-  /* Enable the ADC2 injected slave (IC/VBUS) and regular DMA before ADC1. */
+  /* Start ADC2 regular voltage DMA before ADC1 current sampling. */
   if (voltage_sample_start() != HAL_OK)
   {
     Error_Handler();

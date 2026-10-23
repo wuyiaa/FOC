@@ -19,6 +19,11 @@ extern volatile uint8_t vofa_pwm_auto_repeat;
 extern volatile uint8_t vofa_pwm_capture_request;
 extern volatile uint32_t vofa_pwm_sent_samples;
 
+/* Latest interval/frequency between successful USB packet submissions.
+   First packet after reset/reconnect has no interval (0). */
+extern volatile float vofa_send_interval_us;
+extern volatile float vofa_send_frequency_hz;
+
 void vofa_init(void);
 void vofa_process(void);
 void vofa_usb_host_request(void);

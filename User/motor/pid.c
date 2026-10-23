@@ -1,7 +1,7 @@
 #include "pid.h"
 
 #include "common.h"
-
+#include "voltage_sample.h"
 #include <math.h>
 #include <stddef.h>
 
@@ -15,7 +15,7 @@
 #define FOC_CURRENT_OUTPUT_LIMIT_V \
     (FOC_DC_BUS_VOLTAGE_V * FOC_CURRENT_OUTPUT_UTILIZATION_INITIAL * ONE_BY_SQRT3)
 
-volatile float FOC_CURRENT_LOOP_BANDWIDTH_DEFAULT_HZ = 350.0f;
+volatile float FOC_CURRENT_LOOP_BANDWIDTH_DEFAULT_HZ = 2500.0f;
 volatile float FOC_CURRENT_OUTPUT_UTILIZATION = FOC_CURRENT_OUTPUT_UTILIZATION_INITIAL;
 static float applied_bandwidth_hz = -1.0f;
 static float applied_output_utilization = -1.0f;
@@ -91,7 +91,7 @@ static void foc_current_pid_parameters_update(void)
     if (isfinite(utilization) && (utilization >= 0.0f) &&
         (utilization <= 1.0f) && (utilization != applied_output_utilization))
     {
-        const float limit = FOC_DC_BUS_VOLTAGE_V * utilization * ONE_BY_SQRT3;
+        const float limit = voltage_sample.vbus_v * utilization * ONE_BY_SQRT3;
 
         foc_id_pid_parameters[3] = limit;
         foc_iq_pid_parameters[3] = limit;
@@ -184,12 +184,12 @@ void foc_current_pid_update(pmsm_t *pm, float dt)
 
     foc_current_pid_parameters_update();
 
-    pm->foc.u_d = -pid_calculate(&foc_id_pid,
-                                pm->foc.i_d_ref,
-                                pm->foc.i_d,
+    pm->foc.Ud_ref = pid_calculate(&foc_id_pid,
+                                pm->foc.id_ref,
+                                pm->foc.id_fdb,
                                 dt);
-    pm->foc.u_q = -pid_calculate(&foc_iq_pid,
-                                pm->foc.i_q_ref,
-                                pm->foc.i_q,
+    pm->foc.Uq_ref = pid_calculate(&foc_iq_pid,
+                                pm->foc.iq_ref,
+                                pm->foc.iq_fdb,
                                 dt);
 }

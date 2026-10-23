@@ -2,12 +2,13 @@
 
 #include <math.h>
 
-/* Keep the existing ADC2 ranks: ADSPE, VA, VB, VC, NTC2. */
-#define VOLTAGE_REGULAR_CHANNEL_COUNT  5U
+/* ADC2 regular ranks: ADSPE, VA, VB, VC, NTC2, VBUS. */
+#define VOLTAGE_REGULAR_CHANNEL_COUNT  6U
 #define VOLTAGE_DMA_COUNT              (2U * VOLTAGE_REGULAR_CHANNEL_COUNT)
 #define VOLTAGE_VA_INDEX               1U
 #define VOLTAGE_VB_INDEX               2U
 #define VOLTAGE_VC_INDEX               3U
+#define VOLTAGE_VBUS_INDEX             5U
 
 volatile voltage_sample_t voltage_sample;
 __ALIGN_BEGIN static volatile uint16_t voltage_adc2_dma[VOLTAGE_DMA_COUNT] __ALIGN_END;
@@ -71,9 +72,9 @@ void voltage_sample_transform_update(float electrical_angle_rad,
     __disable_irq();
     phase_update_count = voltage_sample.phase_update_count;
     phase_valid = voltage_sample.phase_valid;
-    va = voltage_sample.va_v;
-    vb = voltage_sample.vb_v;
-    vc = voltage_sample.vc_v;
+    va = voltage_sample.Uag.value;
+    vb = voltage_sample.Ubg.value;
+    vc = voltage_sample.Ucg.value;
     __set_PRIMASK(saved_primask);
 
     if (phase_valid == 0U)
@@ -93,10 +94,10 @@ void voltage_sample_transform_update(float electrical_angle_rad,
     v_bn = vb - v_neutral;
     v_cn = vc - v_neutral;
 
-    voltage_sample.v_neutral_v = v_neutral;
-    voltage_sample.v_an_v = v_an;
-    voltage_sample.v_bn_v = v_bn;
-    voltage_sample.v_cn_v = v_cn;
+    voltage_sample.U_ng = v_neutral;
+    voltage_sample.Uan = v_an;
+    voltage_sample.Ubn = v_bn;
+    voltage_sample.Ucn = v_cn;
 
     /* The physical winding values above keep MA/MB/MC order. The transform
        uses the same calibrated logical phase order as the current loop. */
@@ -109,8 +110,8 @@ void voltage_sample_transform_update(float electrical_angle_rad,
 
     voltage_sample_clarke(v_an, v_bn, v_cn, &v_alpha, &v_beta);
 
-    voltage_sample.v_alpha = v_alpha;
-    voltage_sample.v_beta = v_beta;
+    voltage_sample.Ualpha_fdb = v_alpha;
+    voltage_sample.Ubeta_fdb = v_beta;
     if (angle_valid == 0U)
     {
         voltage_sample.transform_valid = 0U;
@@ -119,8 +120,8 @@ void voltage_sample_transform_update(float electrical_angle_rad,
     }
 
     voltage_sample_park(v_alpha, v_beta, electrical_angle_rad, &v_d, &v_q);
-    voltage_sample.v_d = v_d;
-    voltage_sample.v_q = v_q;
+    voltage_sample.Ud_fdb = v_d;
+    voltage_sample.Uq_fdb = v_q;
     voltage_sample.transform_update_count++;
     voltage_sample.transform_valid = 1U;
     last_phase_update_count = phase_update_count;
@@ -136,19 +137,10 @@ HAL_StatusTypeDef voltage_sample_start(void)
         return status;
     }
 
-    /* Enable the ADC2 injected slave before arming ADC1's TIM1_CC4 trigger.
-       Rank 1 is IC; rank 2 is VBUS. No ADC2 injected interrupt is needed. */
-    status = HAL_ADCEx_InjectedStart(&hadc2);
-    if (status != HAL_OK)
-    {
-        return status;
-    }
-
     status = HAL_ADC_Start_DMA(&hadc2, (uint32_t *)voltage_adc2_dma,
                               VOLTAGE_DMA_COUNT);
     if (status != HAL_OK)
     {
-        (void)HAL_ADCEx_InjectedStop(&hadc2);
         return status;
     }
 
@@ -159,7 +151,35 @@ HAL_StatusTypeDef voltage_sample_start(void)
     return HAL_OK;
 }
 
-static void voltage_sample_phase_update(void)
+/* Average accepted snapshots only; startup uses the available sample count. */
+static void voltage_sample_average_update(uint16_t va, uint16_t vb, uint16_t vc)
+{
+    static uint16_t history[VOLTAGE_AVERAGE_SAMPLE_COUNT][3];
+    static uint32_t sums[3];
+    static uint32_t index;
+    static uint32_t count;
+    const uint16_t raw[3] = {va, vb, vc};
+    uint32_t phase;
+    float scale;
+
+    for (phase = 0U; phase < 3U; phase++)
+    {
+        sums[phase] -= history[index][phase];
+        history[index][phase] = raw[phase];
+        sums[phase] += raw[phase];
+    }
+    index = (index + 1U) % VOLTAGE_AVERAGE_SAMPLE_COUNT;
+    if (count < VOLTAGE_AVERAGE_SAMPLE_COUNT)
+    {
+        count++;
+    }
+    scale = VOLTAGE_ADC_V_PER_COUNT / (float)count;
+    voltage_sample.Uag.average = (float)sums[0] * scale;
+    voltage_sample.Ubg.average = (float)sums[1] * scale;
+    voltage_sample.Ucg.average = (float)sums[2] * scale;
+}
+
+static uint8_t voltage_sample_regular_update(void)
 {
     DMA_HandleTypeDef *dma = hadc2.DMA_Handle;
     uint32_t remaining_before;
@@ -168,11 +188,12 @@ static void voltage_sample_phase_update(void)
     uint16_t va;
     uint16_t vb;
     uint16_t vc;
+    uint16_t vbus;
 
     remaining_before = __HAL_DMA_GET_COUNTER(dma);
     if ((remaining_before == 0U) || (remaining_before > VOLTAGE_DMA_COUNT))
     {
-        return;
+        return 0U;
     }
 
     if (remaining_before > VOLTAGE_REGULAR_CHANNEL_COUNT)
@@ -181,7 +202,7 @@ static void voltage_sample_phase_update(void)
            after the very first full-buffer completion (TC stays latched). */
         if (__HAL_DMA_GET_FLAG(dma, __HAL_DMA_GET_TC_FLAG_INDEX(dma)) == RESET)
         {
-            return;
+            return 0U;
         }
         offset = VOLTAGE_REGULAR_CHANNEL_COUNT;
     }
@@ -194,32 +215,36 @@ static void voltage_sample_phase_update(void)
     va = voltage_adc2_dma[offset + VOLTAGE_VA_INDEX];
     vb = voltage_adc2_dma[offset + VOLTAGE_VB_INDEX];
     vc = voltage_adc2_dma[offset + VOLTAGE_VC_INDEX];
+    vbus = voltage_adc2_dma[offset + VOLTAGE_VBUS_INDEX];
     __DMB();
     remaining_after = __HAL_DMA_GET_COUNTER(dma);
 
-    /* This bounded copy runs in the highest-priority ADC ISR. Reject it if
-       DMA crossed a block boundary while the three values were copied. */
+    /* Reject this set if DMA crossed a block boundary during the copy. */
     if ((remaining_after == 0U) || (remaining_after > remaining_before) ||
         ((remaining_before > VOLTAGE_REGULAR_CHANNEL_COUNT) !=
          (remaining_after > VOLTAGE_REGULAR_CHANNEL_COUNT)))
     {
-        return;
+        return 0U;
     }
 
-    voltage_sample.va_raw = va;
-    voltage_sample.vb_raw = vb;
-    voltage_sample.vc_raw = vc;
-    voltage_sample.va_v = (float)va * VOLTAGE_ADC_V_PER_COUNT;
-    voltage_sample.vb_v = (float)vb * VOLTAGE_ADC_V_PER_COUNT;
-    voltage_sample.vc_v = (float)vc * VOLTAGE_ADC_V_PER_COUNT;
+    voltage_sample.Uag.raw = va;
+    voltage_sample.Ubg.raw = vb;
+    voltage_sample.Ucg.raw = vc;
+    voltage_sample.Uag.value = (float)va * VOLTAGE_ADC_V_PER_COUNT;
+    voltage_sample.Ubg.value = (float)vb * VOLTAGE_ADC_V_PER_COUNT;
+    voltage_sample.Ucg.value = (float)vc * VOLTAGE_ADC_V_PER_COUNT;
+    voltage_sample.vbus_raw = vbus;
+    voltage_sample.vbus_v = (float)vbus * VOLTAGE_ADC_V_PER_COUNT;
+    voltage_sample_average_update(va, vb, vc);
     voltage_sample.phase_update_count++;
+    voltage_sample.bus_update_count++;
     voltage_sample.phase_valid = 1U;
+    voltage_sample.bus_valid = 1U;
+    return 1U;
 }
 
 void voltage_sample_update(void)
 {
-    uint16_t raw;
-
     voltage_sample.bus_fresh = 0U;
     voltage_sample.adc_error_code = HAL_ADC_GetError(&hadc2);
     if (voltage_sample.adc_error_code != HAL_ADC_ERROR_NONE)
@@ -230,17 +255,9 @@ void voltage_sample_update(void)
         return;
     }
 
-    /* ADC1 finishes its two current conversions before ADC2 finishes VBUS.
-       Consume the latest completed ADC2 sequence (possibly the previous PWM
-       period); never wait for the bus conversion inside the current loop. */
-    if (__HAL_ADC_GET_FLAG(&hadc2, ADC_FLAG_JEOS) != RESET)
+    /* Publish one complete regular DMA scan without waiting for ADC2. */
+    if (voltage_sample_regular_update() != 0U)
     {
-        raw = (uint16_t)hadc2.Instance->JDR2;
-        __HAL_ADC_CLEAR_FLAG(&hadc2, ADC_FLAG_JEOC | ADC_FLAG_JEOS);
-        voltage_sample.vbus_raw = raw;
-        voltage_sample.vbus_v = (float)raw * VOLTAGE_ADC_V_PER_COUNT;
-        voltage_sample.bus_update_count++;
-        voltage_sample.bus_valid = 1U;
         voltage_sample.bus_fresh = 1U;
     }
     else
@@ -248,6 +265,4 @@ void voltage_sample_update(void)
         /* Keep the previous value when no new completed sequence is available. */
         voltage_sample.bus_not_ready_count++;
     }
-
-    voltage_sample_phase_update();
 }

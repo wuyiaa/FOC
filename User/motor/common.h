@@ -80,14 +80,6 @@ typedef enum
 
 typedef struct
 {
-    uint16_t ia;
-    uint16_t ib;
-    uint16_t ic;
-
-    float ia_off;
-    float ib_off;
-    float ic_off;
-
     volatile uint8_t offset_ready;
 } pmsm_adc_val_t;
 
@@ -111,9 +103,19 @@ typedef struct
 
 typedef struct
 {
-    float i_a;
-    float i_b;
-    float i_c;
+    uint16_t raw;          /* ADC counts, physical channel. */
+    float offset;         /* Zero offset in ADC counts. */
+    float with_offset;    /* Converted to A, including bias. */
+    float nonrecon;       /* Offset removed, polarity corrected, A. */
+    float reconstructed;  /* Reconstruction output; otherwise nonrecon. */
+} pmsm_phase_current_t;
+
+typedef struct
+{
+    /* Physical A/B/C. Logical phase mapping occurs in Clarke. */
+    pmsm_phase_current_t ia;
+    pmsm_phase_current_t ib;
+    pmsm_phase_current_t ic;
 	
 		float i_a_ref;
     float i_b_ref;
@@ -121,12 +123,12 @@ typedef struct
 
     float i_alpha;
     float i_beta;
-    float i_d_ref;
-    float i_q_ref;
-    float i_d;
-    float i_q;
-    float u_d;
-    float u_q;
+    float id_ref;
+    float iq_ref;
+    float id_fdb;
+    float iq_fdb;
+    float Ud_ref;
+    float Uq_ref;
     float u_alpha;
     float u_beta;
     float electrical_angle_rad;
@@ -163,9 +165,6 @@ typedef struct
     uint8_t full_clarke;
 
     /* Calibrated phase currents before reconstruction, from this ADC sequence (A). */
-    float i_a_before_reconstruction;
-    float i_b_before_reconstruction;
-    float i_c_before_reconstruction;
     float i_sum_before_reconstruction;
 
     pmsm_phase_t reconstructed_phase;
@@ -205,6 +204,15 @@ typedef struct
     volatile uint32_t drive_start_cycle;
     volatile uint8_t drive_observation_started;
     volatile uint16_t drive_last_raw;
+    /* Current polarity: persisted with zero/phase; +1 keeps sign, -1 reverses. */
+    int8_t current_direction;
+    uint8_t current_polarity_required;
+    /* 0=idle, 1=settling, 2=averaging, 3=valid, 4=failed. */
+    uint8_t current_polarity_status;
+    uint32_t current_polarity_start_cycle;
+    uint32_t current_polarity_count;
+    float current_polarity_sum[3];
+    float current_polarity_mean[3]; /* Physical A/B/C, before correction. */
     volatile int32_t drive_delta_counts;
 } pmsm_encoder_zero_cal_t;
 

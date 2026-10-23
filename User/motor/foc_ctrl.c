@@ -5,12 +5,12 @@ static uint8_t foc_current_trip_reached(const pmsm_foc_t *foc)
 {
     const float current_limit = FOC_CURRENT_TRIP_LIMIT_A;
 
-    return (uint8_t)((foc->i_a >= current_limit) ||
-                     (foc->i_a <= -current_limit) ||
-                     (foc->i_b >= current_limit) ||
-                     (foc->i_b <= -current_limit) ||
-                     (foc->i_c >= current_limit) ||
-                     (foc->i_c <= -current_limit));
+    return (uint8_t)((foc->ia.reconstructed >= current_limit) ||
+                     (foc->ia.reconstructed <= -current_limit) ||
+                     (foc->ib.reconstructed >= current_limit) ||
+                     (foc->ib.reconstructed <= -current_limit) ||
+                     (foc->ic.reconstructed >= current_limit) ||
+                     (foc->ic.reconstructed <= -current_limit));
 }
 
 static void foc_adc_time_measure_update(pmsm_t *pm)
@@ -36,8 +36,8 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 
         foc_adc_time_measure_update(&pm);
 
-        /* Read after the timing marker so voltage processing does not add
-           to the measured ADC conversion latency. Control still uses 24 V. */
+        /* Read regular DMA voltages after the timing marker so processing
+           does not add to the measured ADC conversion latency. */
         voltage_sample_update();
 
         /* FOC uses one coherent copy of the most recently published angle. */
@@ -70,12 +70,12 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
         foc_current_calc(&pm);
 #if ((FOC_ENCODER_ZERO_CALIBRATION_MODE == 0U) && \
      (FOC_PHASE_AUTO_CALIBRATION_MODE == 0U))
-				pm.foc.i_d_ref = 0;
-				pm.foc.i_q_ref = 0.5f;
+				pm.foc.id_ref = 0.0f;
+				pm.foc.iq_ref = 0.1f;
         foc_current_pid_update(&pm, PWM_PERIOD_S);
 #endif
-//				pm.foc.u_d = 0.0f;
-//				pm.foc.u_q = 0.2f;
+//				pm.foc.Ud_ref = 0.0f;
+//				pm.foc.Uq_ref = 2.2f;
         foc_voltage_calc(&pm, voltage_sample.vbus_v, pm.svpwm.vref2_min);
         foc_pwm_output_update(&pm);
         /* Start the next pipelined encoder DMA frame, then leave immediately. */

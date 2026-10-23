@@ -42,8 +42,8 @@ static uint16_t current_window_get(uint16_t pwm_cmp)
 static pmsm_phase_t max_current_phase_get(const pmsm_foc_t *foc)
 {
     pmsm_phase_t phase = PMSM_PHASE_A;
-    float current_max = foc_abs(foc->i_a);
-    float current_abs = foc_abs(foc->i_b);
+    float current_max = foc_abs(foc->ia.nonrecon);
+    float current_abs = foc_abs(foc->ib.nonrecon);
 
     if (current_abs > current_max)
     {
@@ -51,7 +51,7 @@ static pmsm_phase_t max_current_phase_get(const pmsm_foc_t *foc)
         phase = PMSM_PHASE_B;
     }
 
-    current_abs = foc_abs(foc->i_c);
+    current_abs = foc_abs(foc->ic.nonrecon);
     if (current_abs > current_max)
     {
         phase = PMSM_PHASE_C;
@@ -86,15 +86,15 @@ static void current_phase_reconstruct(pmsm_foc_t *foc, pmsm_phase_t phase)
     switch (phase)
     {
         case PMSM_PHASE_A:
-            foc->i_a = -(foc->i_b + foc->i_c);
+            foc->ia.reconstructed = -(foc->ib.nonrecon + foc->ic.nonrecon);
             break;
 
         case PMSM_PHASE_B:
-            foc->i_b = -(foc->i_a + foc->i_c);
+            foc->ib.reconstructed = -(foc->ia.nonrecon + foc->ic.nonrecon);
             break;
 
         case PMSM_PHASE_C:
-            foc->i_c = -(foc->i_a + foc->i_b);
+            foc->ic.reconstructed = -(foc->ia.nonrecon + foc->ib.nonrecon);
             break;
 
         case PMSM_PHASE_NONE:
@@ -107,26 +107,14 @@ void foc_current_sample_process(pmsm_t *pm)
 {
     pmsm_current_sample_t *sample = &pm->current_sample;
 
-    /* Snapshot before any phase is replaced; VOFA copies this together
-       with the selected reconstruction phase under its existing IRQ lock. */
-    sample->i_a_before_reconstruction = pm->foc.i_a;
-    sample->i_b_before_reconstruction = pm->foc.i_b;
-    sample->i_c_before_reconstruction = pm->foc.i_c;
-    sample->i_sum_before_reconstruction =
-        sample->i_a_before_reconstruction +
-        sample->i_b_before_reconstruction +
-        sample->i_c_before_reconstruction;
+    sample->i_sum_before_reconstruction = pm->foc.ia.nonrecon +
+        pm->foc.ib.nonrecon + pm->foc.ic.nonrecon;
 	
     sample->pwm_cmp_a = (uint16_t)TIM1->CCR1;
     sample->pwm_cmp_b = (uint16_t)TIM1->CCR2;
     sample->pwm_cmp_c = (uint16_t)TIM1->CCR3;
 
-    if (calibration.phase_reversed != 0U)
-    {
-        uint16_t swap = sample->pwm_cmp_a;
-        sample->pwm_cmp_a = sample->pwm_cmp_c;
-        sample->pwm_cmp_c = swap;
-    }
+    /* Window checks and reconstructed_phase use physical A/B/C. */
 
     sample->window_a = current_window_get(sample->pwm_cmp_a);
     sample->window_b = current_window_get(sample->pwm_cmp_b);
@@ -145,34 +133,33 @@ void foc_current_sample_process(pmsm_t *pm)
         sample->full_clarke = 0U;
     }
 #if (CURRENT_RECONSTRUCTION_MODE == CURRENT_RECONSTRUCTION_MIN_WINDOW)
-//    else
-//    {
-//		if(sample->window_a_valid == 0 || sample->window_b_valid == 0 || sample->window_c_valid == 0)
+//		if(sample->window_valid)//因为有三相都有效的时候，如果只是无效的时候启用，容易三相都有效的时候畸形
 //		{
 			sample->reconstructed_phase = min_window_phase_get(sample);
 			sample->full_clarke = 0U;
 //		}			
-//    }
 #endif
-sample->full_clarke = 1U;
+//sample->full_clarke = 1U;
     current_phase_reconstruct(&pm->foc, sample->reconstructed_phase);
 }
 
 void clarke_transform(pmsm_foc_t *foc, uint8_t full_clarke)
 {
+    /* Map physical currents to logical phases only at the control boundary. */
+    const float ia = (calibration.phase_reversed != 0U) ?
+        foc->ic.reconstructed : foc->ia.reconstructed;
+    const float ib = foc->ib.reconstructed;
+    const float ic = (calibration.phase_reversed != 0U) ?
+        foc->ia.reconstructed : foc->ic.reconstructed;
     if (full_clarke != 0U)
     {
-        foc->i_alpha = foc->i_a * TWO_BY_THREE
-                     - foc->i_b * ONE_BY_THREE
-                     - foc->i_c * ONE_BY_THREE;
-        foc->i_beta = foc->i_b * ONE_BY_SQRT3
-                    - foc->i_c * ONE_BY_SQRT3;
+        foc->i_alpha = ia * TWO_BY_THREE - ib * ONE_BY_THREE - ic * ONE_BY_THREE;
+        foc->i_beta = ib * ONE_BY_SQRT3 - ic * ONE_BY_SQRT3;
     }
     else
     {
-        foc->i_alpha = foc->i_a;
-        foc->i_beta = foc->i_a * ONE_BY_SQRT3
-                    + foc->i_b * TWO_BY_SQRT3;
+        foc->i_alpha = ia;
+        foc->i_beta = ia * ONE_BY_SQRT3 + ib * TWO_BY_SQRT3;
     }
 }
 
@@ -235,9 +222,9 @@ void park_transform(pmsm_t *pm)
         return;
     }
 
-    pm->foc.i_d = pm->foc.i_alpha * cos_theta
+    pm->foc.id_fdb = pm->foc.i_alpha * cos_theta
                 + pm->foc.i_beta * sin_theta;
-    pm->foc.i_q = pm->foc.i_beta * cos_theta
+    pm->foc.iq_fdb = pm->foc.i_beta * cos_theta
                 - pm->foc.i_alpha * sin_theta;
 }
 
@@ -257,14 +244,14 @@ void inverse_park_transform(pmsm_t *pm)
         return;
     }
 
-//		pm->foc.u_d = 0;
-//		pm->foc.u_q = 0.66;
+//		pm->foc.Ud_ref = 0;
+//		pm->foc.Uq_ref = 0.66;
 		
     /* Inverse of the Park convention used above. */
-    pm->foc.u_alpha = pm->foc.u_d * cos_theta
-                    - pm->foc.u_q * sin_theta;
-    pm->foc.u_beta  = pm->foc.u_d * sin_theta
-                    + pm->foc.u_q * cos_theta;
+    pm->foc.u_alpha = pm->foc.Ud_ref * cos_theta
+                    - pm->foc.Uq_ref * sin_theta;
+    pm->foc.u_beta  = pm->foc.Ud_ref * sin_theta
+                    + pm->foc.Uq_ref * cos_theta;
 //		pm->foc.u_alpha = 2.5f;//2.5f; 5.0f
 //		pm->foc.u_beta  = 4.33f;//4.33f 0.0f
 }
