@@ -170,6 +170,11 @@
           <WinNumber>2</WinNumber>
           <ItemText>pm.adc_measure.sample_time_ms,0x0A</ItemText>
         </Ww>
+        <Ww>
+          <count>2</count>
+          <WinNumber>2</WinNumber>
+          <ItemText>calibration.phase_reversed,0x0A</ItemText>
+        </Ww>
       </WatchWindow2>
       <Tracepoint>
         <THDelay>0</THDelay>

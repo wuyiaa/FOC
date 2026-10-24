@@ -13,30 +13,69 @@ static uint8_t foc_current_trip_reached(const pmsm_foc_t *foc)
                      (foc->ic.reconstructed <= -current_limit));
 }
 
+static float adc_timer_tick_ms;
+
 static void foc_adc_time_measure_update(pmsm_t *pm)
 {
-    if (pm->adc_measure.active != 0U)
+    uint32_t direction_before;
+    uint32_t direction_after;
+    uint32_t count;
+    uint32_t period;
+    uint32_t phase;
+    uint32_t trigger;
+
+    if (pm->adc_measure.active == 0U)
     {
-        pm->adc_measure.sample_time_ms =
-            DWT_GetDeltaT(&pm->adc_measure.time_last) * 1000.0f;
-        pm->adc_measure.active = 0U;
-        pm->adc_measure.done = 1U;
+        return;
     }
+
+    /* PB10 / CN9 pin 4 rising edge marks the following CNT read.
+       On a direction-change retry, the last rising edge is the valid one.
+       The pulse width is timing-code execution, not ADC conversion time. */
+    do
+    {
+        ADC_TIME_MARK_GPIO_Port->BSRR = (uint32_t)ADC_TIME_MARK_Pin << 16U;
+        direction_before = TIM1->CR1 & TIM_CR1_DIR;
+        ADC_TIME_MARK_GPIO_Port->BSRR = ADC_TIME_MARK_Pin;
+        count = TIM1->CNT;
+        direction_after = TIM1->CR1 & TIM_CR1_DIR;
+    } while (direction_before != direction_after);
+
+    /* Center-aligned mode 2: CC4 compare event on the up-count.
+       This is a modulo-one-PWM-period latency, not pure ADC conversion time.
+       A delay of a full PWM period or more cannot be detected here. */
+    period = 2U * TIM1->ARR;
+    trigger = TIM1->CCR4;
+    if ((period == 0U) || (trigger > TIM1->ARR))
+    {
+        pm->adc_measure.done = 0U;
+        ADC_TIME_MARK_GPIO_Port->BSRR = (uint32_t)ADC_TIME_MARK_Pin << 16U;
+        return;
+    }
+    phase = (direction_after != 0U) ? (period - count) : count;
+    pm->adc_measure.elapsed_ticks =
+        (phase >= trigger) ? (phase - trigger) : (period - trigger + phase);
+    pm->adc_measure.timer_count = count;
+    pm->adc_measure.timer_counting_down = (direction_after != 0U) ? 1U : 0U;
+    pm->adc_measure.sample_time_ms =
+        (float)pm->adc_measure.elapsed_ticks * adc_timer_tick_ms;
+    pm->adc_measure.done = 1U;
+    ADC_TIME_MARK_GPIO_Port->BSRR = (uint32_t)ADC_TIME_MARK_Pin << 16U;
 }
 
 void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 {
     if (hadc->Instance == ADC1)
     {
+        foc_adc_time_measure_update(&pm);
+
         if (pm.adc.offset_ready == 0U)
         {
             voltage_sample_update();
             return;
         }
 
-        foc_adc_time_measure_update(&pm);
-
-        /* Read regular DMA voltages after the timing marker so processing
+        /* Read injected VBUS and DMA voltages after the timing marker so processing
            does not add to the measured ADC conversion latency. */
         voltage_sample_update();
 
@@ -75,7 +114,7 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
         foc_current_pid_update(&pm, PWM_PERIOD_S);
 #endif
 //				pm.foc.Ud_ref = 0.0f;
-//				pm.foc.Uq_ref = 2.2f;
+//				pm.foc.Uq_ref = 13.2f;
         foc_voltage_calc(&pm, voltage_sample.vbus_v, pm.svpwm.vref2_min);
         foc_pwm_output_update(&pm);
         /* Start the next pipelined encoder DMA frame, then leave immediately. */
@@ -85,22 +124,23 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 
 void foc_adc_time_measure_arm(pmsm_t *pm)
 {
-    pm->adc_measure.time_last = 0U;
+    uint32_t timer_clock_hz = HAL_RCC_GetPCLK2Freq();
+
+    /* STM32G4 timer clock doubles when the APB2 prescaler is not one. */
+    if ((RCC->CFGR & RCC_CFGR_PPRE2) != 0U)
+    {
+        timer_clock_hz *= 2U;
+    }
+    adc_timer_tick_ms = 1000.0f * (float)(TIM1->PSC + 1U) /
+                        (float)timer_clock_hz;
     pm->adc_measure.sample_time_ms = 0.0f;
-    pm->adc_measure.active = 0U;
+    pm->adc_measure.elapsed_ticks = 0U;
+    pm->adc_measure.timer_count = 0U;
+    pm->adc_measure.timer_counting_down = 0U;
     pm->adc_measure.done = 0U;
 
+    /* Only disable the software timing IRQ; hardware ADC triggering remains. */
+    __HAL_TIM_DISABLE_IT(&htim1, TIM_IT_CC4);
     __HAL_TIM_CLEAR_FLAG(&htim1, TIM_FLAG_CC4);
-    __HAL_TIM_ENABLE_IT(&htim1, TIM_IT_CC4);
+    pm->adc_measure.active = 1U;
 }
-
-void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
-{
-    if ((htim->Instance == TIM1) &&
-        (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_4) &&
-        (pm.adc_measure.active == 0U))
-    {
-        pm.adc_measure.time_last = DWT->CYCCNT;
-        pm.adc_measure.active = 1U;
-    }
-}//(__HAL_TIM_IS_TIM_COUNTING_DOWN(htim) == 0U)

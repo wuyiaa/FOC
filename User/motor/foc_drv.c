@@ -7,6 +7,8 @@
 pmsm_t pm;
 
 static uint8_t foc_pwm_channels_started;
+/* ADC channel offsets stay in physical A/B/C order across phase changes. */
+static float physical_current_offset[3];
 
 HAL_StatusTypeDef foc_pwm_output_enable(pmsm_t *pm)
 {
@@ -167,15 +169,20 @@ void foc_get_curr_off(void)
         HAL_Delay(1U);
         sum_a += (float)ADC1->JDR1;
         sum_b += (float)ADC1->JDR2;
-        sum_c += (float)ADC1->JDR3;
+        sum_c += (float)ADC2->JDR1;
 //			  sum_a += (float)ADC1->JDR2;
 //        sum_b += (float)ADC1->JDR1;
 //        sum_c += (float)ADC1->JDR3;
     }
 
-    pm.foc.ia.offset = sum_a * 0.001f;
-    pm.foc.ib.offset = sum_b * 0.001f;
-    pm.foc.ic.offset = sum_c * 0.001f;
+    physical_current_offset[0] = sum_a * 0.001f;
+    physical_current_offset[1] = sum_b * 0.001f;
+    physical_current_offset[2] = sum_c * 0.001f;
+    pm.foc.ia.offset = (calibration.phase_reversed != 0U) ?
+        physical_current_offset[2] : physical_current_offset[0];
+    pm.foc.ib.offset = physical_current_offset[1];
+    pm.foc.ic.offset = (calibration.phase_reversed != 0U) ?
+        physical_current_offset[0] : physical_current_offset[2];
     pm.adc.offset_ready = 1U;
 }
 
@@ -190,9 +197,17 @@ static void phase_current_convert(pmsm_phase_current_t *current, float ratio,
 
 void foc_adc_sample(pmsm_t *pm)
 {
-    pm->foc.ia.raw = (uint16_t)ADC1->JDR1;
+    /* Map ADC channels and their offsets to logical phases together. */
+    pm->foc.ia.raw = (calibration.phase_reversed != 0U) ?
+        (uint16_t)ADC2->JDR1 : (uint16_t)ADC1->JDR1;
     pm->foc.ib.raw = (uint16_t)ADC1->JDR2;
-    pm->foc.ic.raw = (uint16_t)ADC1->JDR3;
+    pm->foc.ic.raw = (calibration.phase_reversed != 0U) ?
+        (uint16_t)ADC1->JDR1 : (uint16_t)ADC2->JDR1;
+    pm->foc.ia.offset = (calibration.phase_reversed != 0U) ?
+        physical_current_offset[2] : physical_current_offset[0];
+    pm->foc.ib.offset = physical_current_offset[1];
+    pm->foc.ic.offset = (calibration.phase_reversed != 0U) ?
+        physical_current_offset[0] : physical_current_offset[2];
     phase_current_convert(&pm->foc.ia, pm->board.i_ratio, calibration.current_direction);
     phase_current_convert(&pm->foc.ib, pm->board.i_ratio, calibration.current_direction);
     phase_current_convert(&pm->foc.ic, pm->board.i_ratio, calibration.current_direction);

@@ -132,37 +132,46 @@ static uint16_t vofa_packet_build(void)
 //		    pm.foc.ia.nonrecon,   
 //        pm.foc.ib.nonrecon,   
 //        pm.foc.ic.nonrecon,   
-//        pm.foc.ia.reconstructed,                  /* CH0: phase A current (A) */
-//        pm.foc.ib.reconstructed,                  /* CH1: phase B current (A) */
-//        pm.foc.ic.reconstructed,                  /* CH2: phase C current (A) */
+        pm.foc.ia.reconstructed,                  /* CH0: phase A current (A) */
+        pm.foc.ib.reconstructed,                  /* CH1: phase B current (A) */
+        pm.foc.ic.reconstructed,                  /* CH2: phase C current (A) */
 			
 //			pm.foc.i_alpha,              /* CH5: alpha-axis current (A) */
 //			pm.foc.i_beta,               /* CH6: beta-axis current (A) */
 			
-//				pm.foc.iq_fdb,
-//				pm.foc.id_fdb,		
+				pm.foc.iq_fdb,
+				pm.foc.id_fdb,		
 			
 			/*目标相电流*/
-//				pm.foc.iq_ref,	
-//				pm.foc.id_ref,
+				pm.foc.iq_ref,	
+				pm.foc.id_ref,
 			
 //				pm.foc.i_a_ref,                  /* CH0: phase A current (A) */
 //        pm.foc.i_b_ref,                  /* CH1: phase B current (A) */
 //        pm.foc.i_c_ref,  
 			
+			/*原始电流值*/
+//				(float)ADC1->JDR1, //ia
+//				(float)ADC1->JDR2, //ib
+//				(float)ADC2->JDR1, //ic
+//				(float)ADC2->JDR2, //vbus
+
+			/*电流采样时间*/
+//			pm.adc_measure.sample_time_ms,
+//			pm.adc_measure.elapsed_ticks,
+//			pm.adc_measure.timer_count,
+//			pm.adc_measure.timer_counting_down,
+			
 			/*相电流偏移*/
-//				(float)ADC1->JDR1,
-//				(float)ADC1->JDR2,
-//				(float)ADC1->JDR3,
 //				 pm.foc.ia.offset,
 //				 pm.foc.ib.offset,
 //				 pm.foc.ic.offset,
 
 				/*电流采样开关管*/
-        (float)TIM1->CNT,          
-        (float)((low_side_levels & LIN1_Pin) != 0U), 
-        (float)((low_side_levels & LIN2_Pin) != 0U), 
-        (float)((low_side_levels & LIN3_Pin) != 0U), 
+//        (float)TIM1->CNT,          
+//        (float)((low_side_levels & LIN1_Pin) != 0U), 
+//        (float)((low_side_levels & LIN2_Pin) != 0U), 
+//        (float)((low_side_levels & LIN3_Pin) != 0U), 
 					
 //			/*反馈相电压*/
 //			voltage_sample.U_ng,  /* CH13: estimated motor neutral (V) */
@@ -179,19 +188,19 @@ static uint16_t vofa_packet_build(void)
 //      voltage_sample.Ubg.average,   
 //      voltage_sample.Ucg.average,
 			
-//			voltage_sample.Ualpha_fdb,
-//			voltage_sample.Ubeta_fdb,
+			voltage_sample.Ualpha_fdb,
+			voltage_sample.Ubeta_fdb,
 
-//			voltage_sample.Uq_fdb,
-//			voltage_sample.Ud_fdb,
+			voltage_sample.Uq_fdb,
+			voltage_sample.Ud_fdb,
 			
 			/*目标相电压*/
 //			pm.foc.u_alpha,                 
 //      pm.foc.u_beta,                  
 
-//				pm.foc.Ud_ref,
-//				pm.foc.Uq_ref,
-			
+				pm.foc.Uq_ref,
+				pm.foc.Ud_ref,
+						
 //			/*马鞍波*/
 //        (float)pm.svpwm.ccr1,        /* CH9: PWM compare 1 */
 //        (float)pm.svpwm.ccr2,        /* CH10: PWM compare 2 */
@@ -201,7 +210,11 @@ static uint16_t vofa_packet_build(void)
 //				pm.foc.mechanical_angle_rad,
 //				pm.foc.electrical_angle_rad,
 			/*电机角速度*/
-			pm.speed.mechanical_rad_s,   /* CH12: mechanical speed (rad/s) */
+//			pm.speed.mechanical_rad_s,   /* CH4: mechanical speed (rad/s) */
+
+//        (float)pm.adc_measure.adc1_jeos_at_callback, /* CH5: ADC1 JEOS in callback */
+//        (float)pm.adc_measure.adc2_jeos_at_callback, /* CH6: ADC2 JEOS in callback */
+//        (float)pm.adc_measure.adc2_jeos_not_set_count, /* CH7: ADC2 JEOS=0 count */
 
 				/*电流环*/
 //				foc_iq_pid.p_output,
@@ -226,9 +239,7 @@ static uint16_t vofa_packet_build(void)
 //							 (pm.current_sample.reconstructed_phase == PMSM_PHASE_B)) &&
 //							((pm.current_sample.window_c_valid != 0U) ||
 //							 (pm.current_sample.reconstructed_phase == PMSM_PHASE_C))),
-//        pm.foc.ia.nonrecon,   /* CH14: A before reconstruction (A) */
-//        pm.foc.ib.nonrecon,   /* CH15: B before reconstruction (A) */
-//        pm.foc.ic.nonrecon,   /* CH16: C before reconstruction (A) */
+
 //        pm.current_sample.i_sum_before_reconstruction /* CH17: A+B+C before reconstruction (A) */
 //				pm.foc.ia.reconstructed+pm.foc.ib.reconstructed+pm.foc.ic.reconstructed,
 

@@ -110,11 +110,14 @@ void foc_current_sample_process(pmsm_t *pm)
     sample->i_sum_before_reconstruction = pm->foc.ia.nonrecon +
         pm->foc.ib.nonrecon + pm->foc.ic.nonrecon;
 	
-    sample->pwm_cmp_a = (uint16_t)TIM1->CCR1;
+    /* TIM1 channels are physical; currents are already logical A/B/C. */
+    sample->pwm_cmp_a = (calibration.phase_reversed != 0U) ?
+        (uint16_t)TIM1->CCR3 : (uint16_t)TIM1->CCR1;
     sample->pwm_cmp_b = (uint16_t)TIM1->CCR2;
-    sample->pwm_cmp_c = (uint16_t)TIM1->CCR3;
+    sample->pwm_cmp_c = (calibration.phase_reversed != 0U) ?
+        (uint16_t)TIM1->CCR1 : (uint16_t)TIM1->CCR3;
 
-    /* Window checks and reconstructed_phase use physical A/B/C. */
+    /* Window checks and reconstructed_phase use logical A/B/C. */
 
     sample->window_a = current_window_get(sample->pwm_cmp_a);
     sample->window_b = current_window_get(sample->pwm_cmp_b);
@@ -145,12 +148,9 @@ void foc_current_sample_process(pmsm_t *pm)
 
 void clarke_transform(pmsm_foc_t *foc, uint8_t full_clarke)
 {
-    /* Map physical currents to logical phases only at the control boundary. */
-    const float ia = (calibration.phase_reversed != 0U) ?
-        foc->ic.reconstructed : foc->ia.reconstructed;
+    const float ia = foc->ia.reconstructed;
     const float ib = foc->ib.reconstructed;
-    const float ic = (calibration.phase_reversed != 0U) ?
-        foc->ia.reconstructed : foc->ic.reconstructed;
+    const float ic = foc->ic.reconstructed;
     if (full_clarke != 0U)
     {
         foc->i_alpha = ia * TWO_BY_THREE - ib * ONE_BY_THREE - ic * ONE_BY_THREE;
@@ -191,8 +191,8 @@ static uint8_t foc_electrical_angle_get(pmsm_t *pm,
     electrical_count =
         (corrected_mechanical_count * (uint32_t)pm->motor.pn) &
         AS5047P_DATA_MASK;
-		
-		pm->foc.mechanical_angle_rad = MOTOR_MECHANICAL_DRV *
+		//MOTOR_MECHANICAL_DRV *
+		pm->foc.mechanical_angle_rad = (float)calibration.electrical_direction * 
         (float)corrected_mechanical_count * AS5047P_RAD_PER_COUNT;
     /* Both Park and inverse Park use electrical zero during zero calibration. */
     if (encoder_zero_calibration_requested != 0U)

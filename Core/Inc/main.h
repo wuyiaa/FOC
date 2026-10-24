@@ -115,6 +115,8 @@ void Error_Handler(void);
 #define CLK_GPIO_Port GPIOA
 #define CSN_Pin GPIO_PIN_2
 #define CSN_GPIO_Port GPIOD
+#define ADC_TIME_MARK_Pin GPIO_PIN_10
+#define ADC_TIME_MARK_GPIO_Port GPIOB
 #define SCK_Pin GPIO_PIN_3
 #define SCK_GPIO_Port GPIOB
 #define MISO_Pin GPIO_PIN_4

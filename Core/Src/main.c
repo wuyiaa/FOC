@@ -114,7 +114,7 @@ int main(void)
     Error_Handler();
   }
 
-  /* Start ADC2 regular voltage DMA before ADC1 current sampling. */
+  /* Enable the ADC2 injected slave (IC/VBUS) and regular DMA before ADC1. */
   if (voltage_sample_start() != HAL_OK)
   {
     Error_Handler();
@@ -141,7 +141,7 @@ int main(void)
   }
 #endif
 
-  /* Continuously measure TIM1_CH4-to-ADC1 callback intervals with DWT. */
+  /* Measure TIM1_CH4-to-ADC1 callback latency from the timer counter. */
   foc_adc_time_measure_arm(&pm);
 
   /* Initialize the non-blocking VOFA+ USB CDC stream. */

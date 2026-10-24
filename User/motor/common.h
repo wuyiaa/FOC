@@ -103,7 +103,7 @@ typedef struct
 
 typedef struct
 {
-    uint16_t raw;          /* ADC counts, physical channel. */
+    uint16_t raw;          /* ADC counts, mapped to the logical phase. */
     float offset;         /* Zero offset in ADC counts. */
     float with_offset;    /* Converted to A, including bias. */
     float nonrecon;       /* Offset removed, polarity corrected, A. */
@@ -112,7 +112,7 @@ typedef struct
 
 typedef struct
 {
-    /* Physical A/B/C. Logical phase mapping occurs in Clarke. */
+    /* Logical A/B/C, mapped from physical ADC channels before conversion. */
     pmsm_phase_current_t ia;
     pmsm_phase_current_t ib;
     pmsm_phase_current_t ic;
@@ -172,10 +172,16 @@ typedef struct
 
 typedef struct
 {
-    uint32_t time_last;
-    float sample_time_ms;
+    volatile uint32_t elapsed_ticks;
+    volatile uint32_t timer_count;
+    volatile uint8_t timer_counting_down;
+    /* Trigger-to-callback latency modulo one PWM period, in milliseconds. */
+    volatile float sample_time_ms;
     uint8_t active;
     uint8_t done;
+    volatile uint8_t adc1_jeos_at_callback;
+    volatile uint8_t adc2_jeos_at_callback;
+    volatile uint32_t adc2_jeos_not_set_count;
 } pmsm_adc_measure_t;
 
 typedef struct
@@ -212,7 +218,7 @@ typedef struct
     uint32_t current_polarity_start_cycle;
     uint32_t current_polarity_count;
     float current_polarity_sum[3];
-    float current_polarity_mean[3]; /* Physical A/B/C, before correction. */
+    float current_polarity_mean[3]; /* Logical A/B/C, before correction. */
     volatile int32_t drive_delta_counts;
 } pmsm_encoder_zero_cal_t;
 

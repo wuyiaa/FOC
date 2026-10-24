@@ -306,7 +306,8 @@ static uint8_t current_polarity_calibration_step(const pmsm_t *pm)
     float main_current;
     float other_current;
     float tolerance;
-    uint32_t main_phase = (calibration.phase_reversed != 0U) ? 2U : 0U;
+    /* Current samples are already mapped to logical A/B/C. */
+    uint32_t main_phase = 0U;
 
     if (calibration.current_polarity_status == 1U)
     {
