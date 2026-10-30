@@ -57,9 +57,6 @@ void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(ADC_TIME_MARK_GPIO_Port, ADC_TIME_MARK_Pin, GPIO_PIN_SET);
 
-  /* Encoder read marker: idle high, active low. PB11 / CN9 pin 5. */
-  HAL_GPIO_WritePin(ENCODER_TIME_MARK_GPIO_Port, ENCODER_TIME_MARK_Pin, GPIO_PIN_SET);
-
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(CSN_GPIO_Port, CSN_Pin, GPIO_PIN_SET);
 
@@ -84,13 +81,6 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(ADC_TIME_MARK_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : ENCODER_TIME_MARK_Pin */
-  GPIO_InitStruct.Pin = ENCODER_TIME_MARK_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-  HAL_GPIO_Init(ENCODER_TIME_MARK_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : KEY1_Pin */
   GPIO_InitStruct.Pin = KEY1_Pin;

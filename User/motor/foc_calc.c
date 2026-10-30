@@ -9,10 +9,10 @@
 #error "Invalid CURRENT_RECONSTRUCTION_MODE"
 #endif
 
-static float foc_abs(float value)
-{
-    return (value < 0.0f) ? -value : value;
-}
+//static float foc_abs(float value)
+//{
+//    return (value < 0.0f) ? -value : value;
+//}
 
 static uint16_t current_window_get(uint16_t pwm_cmp)
 {
@@ -27,26 +27,26 @@ static uint16_t current_window_get(uint16_t pwm_cmp)
     return (uint16_t)(2U * (PWM_PERIOD_TICKS - pwm_cmp));
 }
 
-static pmsm_phase_t max_current_phase_get(const pmsm_foc_t *foc)
-{
-    pmsm_phase_t phase = PMSM_PHASE_A;
-    float current_max = foc_abs(foc->ia.nonrecon);
-    float current_abs = foc_abs(foc->ib.nonrecon);
+//static pmsm_phase_t max_current_phase_get(const pmsm_foc_t *foc)
+//{
+//    pmsm_phase_t phase = PMSM_PHASE_A;
+//    float current_max = foc_abs(foc->ia.nonrecon);
+//    float current_abs = foc_abs(foc->ib.nonrecon);
 
-    if (current_abs > current_max)
-    {
-        current_max = current_abs;
-        phase = PMSM_PHASE_B;
-    }
+//    if (current_abs > current_max)
+//    {
+//        current_max = current_abs;
+//        phase = PMSM_PHASE_B;
+//    }
 
-    current_abs = foc_abs(foc->ic.nonrecon);
-    if (current_abs > current_max)
-    {
-        phase = PMSM_PHASE_C;
-    }
+//    current_abs = foc_abs(foc->ic.nonrecon);
+//    if (current_abs > current_max)
+//    {
+//        phase = PMSM_PHASE_C;
+//    }
 
-    return phase;
-}
+//    return phase;
+//}
 
 #if (CURRENT_RECONSTRUCTION_MODE == CURRENT_RECONSTRUCTION_MIN_WINDOW)
 static pmsm_phase_t min_window_phase_get(const pmsm_current_sample_t *sample)

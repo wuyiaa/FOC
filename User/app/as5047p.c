@@ -15,7 +15,6 @@
 
 static as5047p_t *as5047p_active_encoder;
 static float as5047p_timer_tick_us;
-static uint32_t as5047p_timeout_ticks;
 static uint32_t as5047p_timer_phase_get(void);
 static uint32_t as5047p_timer_elapsed(uint32_t start_phase);
 static void as5047p_response_process(as5047p_t *encoder, uint16_t response,
@@ -45,7 +44,7 @@ static uint16_t as5047p_make_read_command(uint16_t address)
 
 static void as5047p_transaction_end(as5047p_t *encoder)
 {
-    HAL_GPIO_WritePin(CSN_GPIO_Port, CSN_Pin, GPIO_PIN_SET);
+    CSN_GPIO_Port->BSRR = CSN_Pin;
     /* Clear the owner before publishing IDLE so a higher-priority FOC IRQ
        cannot start a new transaction and then have its owner cleared here. */
     as5047p_active_encoder = NULL;
@@ -100,8 +99,6 @@ void as5047p_init(as5047p_t *encoder)
     }
     as5047p_timer_tick_us = 1000000.0f * (float)(TIM1->PSC + 1U) /
                             (float)timer_clock_hz;
-    as5047p_timeout_ticks = (uint32_t)
-        ((float)AS5047P_SPI_TIMEOUT_US / as5047p_timer_tick_us + 0.5f);
 
     encoder->state = AS5047P_IDLE;
     encoder->pipeline_primed = 0U;
@@ -135,9 +132,8 @@ void as5047p_init(as5047p_t *encoder)
     encoder->response_is_errfl_pending = 0U;
     encoder->fault = 0U;
     encoder->spi_error_count = 0U;
-    encoder->spi_timeout_count = 0U;
     as5047p_active_encoder = NULL;
-    HAL_GPIO_WritePin(CSN_GPIO_Port, CSN_Pin, GPIO_PIN_SET);
+    CSN_GPIO_Port->BSRR = CSN_Pin;
 }
 
 HAL_StatusTypeDef as5047p_read_start_dma(as5047p_t *encoder)
@@ -171,14 +167,14 @@ HAL_StatusTypeDef as5047p_read_start_dma(as5047p_t *encoder)
     /* DWT is only the angle timestamp; TIM1 measures transfer duration. */
     encoder->transfer_start_cycle = DWT->CYCCNT;
     encoder->transfer_start_phase = as5047p_timer_phase_get();
-    HAL_GPIO_WritePin(CSN_GPIO_Port, CSN_Pin, GPIO_PIN_RESET);
+    CSN_GPIO_Port->BSRR = (uint32_t)CSN_Pin << 16U;
     status = HAL_SPI_TransmitReceive_DMA(&hspi1,
                                         (uint8_t *)&encoder->tx_word,
                                         (uint8_t *)&encoder->rx_word,
                                         1U);
     if (status != HAL_OK)
     {
-        HAL_GPIO_WritePin(CSN_GPIO_Port, CSN_Pin, GPIO_PIN_SET);
+        CSN_GPIO_Port->BSRR = CSN_Pin;
         encoder->state = AS5047P_IDLE;
         as5047p_active_encoder = NULL;
 
@@ -234,9 +230,8 @@ static uint32_t as5047p_timer_elapsed(uint32_t start_phase)
         (end_phase - start_phase) : (period - start_phase + end_phase);
 }
 
-/* All three SPI waits share the same TIM1 start point and timeout budget. */
-static HAL_StatusTypeDef as5047p_wait_spi(uint32_t flag, uint32_t expected,
-                                        uint32_t start_phase)
+/* Poll SPI status only; timing snapshots are outside the wait loops. */
+static HAL_StatusTypeDef as5047p_wait_spi(uint32_t flag, uint32_t expected)
 {
     uint32_t sr;
 
@@ -246,10 +241,6 @@ static HAL_StatusTypeDef as5047p_wait_spi(uint32_t flag, uint32_t expected,
         if ((sr & (SPI_SR_OVR | SPI_SR_MODF | SPI_SR_FRE)) != 0U)
         {
             return HAL_ERROR;
-        }
-        if (as5047p_timer_elapsed(start_phase) >= as5047p_timeout_ticks)
-        {
-            return HAL_TIMEOUT;
         }
         if ((sr & flag) == expected)
         {
@@ -281,8 +272,7 @@ HAL_StatusTypeDef as5047p_read_blocking(as5047p_t *encoder,
         return HAL_BUSY;
     }
 
-    /* Match the full read measurement to the PB11 low pulse. */
-    ENCODER_TIME_MARK_GPIO_Port->BSRR = (uint32_t)ENCODER_TIME_MARK_Pin << 16U;
+    /* TIM1 CNT/direction snapshots measure the whole blocking read. */
     read_start_phase = as5047p_timer_phase_get();
 
     hspi1.Lock = HAL_LOCKED;
@@ -303,23 +293,20 @@ HAL_StatusTypeDef as5047p_read_blocking(as5047p_t *encoder,
     __HAL_SPI_ENABLE(&hspi1);
     encoder->transfer_start_cycle = DWT->CYCCNT;
     start_phase = as5047p_timer_phase_get();
-    HAL_GPIO_WritePin(CSN_GPIO_Port, CSN_Pin, GPIO_PIN_RESET);
-    status = as5047p_wait_spi(SPI_SR_TXE, SPI_SR_TXE,
-                              start_phase);
+    CSN_GPIO_Port->BSRR = (uint32_t)CSN_Pin << 16U;
+    status = as5047p_wait_spi(SPI_SR_TXE, SPI_SR_TXE);
     if (status == HAL_OK)
     {
         *(__IO uint16_t *)&hspi1.Instance->DR = encoder->tx_word;
-        status = as5047p_wait_spi(SPI_SR_RXNE, SPI_SR_RXNE,
-                                  start_phase);
+        status = as5047p_wait_spi(SPI_SR_RXNE, SPI_SR_RXNE);
     }
     if (status == HAL_OK)
     {
         encoder->rx_word = *(__IO uint16_t *)&hspi1.Instance->DR;
-        status = as5047p_wait_spi(SPI_SR_BSY, 0U,
-                                  start_phase);
+        status = as5047p_wait_spi(SPI_SR_BSY, 0U);
     }
 
-    HAL_GPIO_WritePin(CSN_GPIO_Port, CSN_Pin, GPIO_PIN_SET);
+    CSN_GPIO_Port->BSRR = CSN_Pin;
     encoder->transfer_timer_ticks = as5047p_timer_elapsed(start_phase);
     encoder->transfer_time_us =
         (float)encoder->transfer_timer_ticks * as5047p_timer_tick_us;
@@ -339,10 +326,6 @@ HAL_StatusTypeDef as5047p_read_blocking(as5047p_t *encoder,
     else
     {
         encoder->spi_error_count++;
-        if (status == HAL_TIMEOUT)
-        {
-            encoder->spi_timeout_count++;
-        }
         __HAL_SPI_DISABLE(&hspi1);
         /* Flush at most the four-byte FIFO; never wait indefinitely on error. */
         for (i = 0U; i < 4U; i++)
@@ -369,7 +352,6 @@ HAL_StatusTypeDef as5047p_read_blocking(as5047p_t *encoder,
     __DMB();
     encoder->state = AS5047P_IDLE;
     read_elapsed_ticks = as5047p_timer_elapsed(read_start_phase);
-    ENCODER_TIME_MARK_GPIO_Port->BSRR = ENCODER_TIME_MARK_Pin;
     encoder->read_timer_ticks = read_elapsed_ticks;
     encoder->read_time_us = (float)read_elapsed_ticks * as5047p_timer_tick_us;
     return status;

@@ -93,8 +93,6 @@ void Error_Handler(void);
 #define NTC2_GPIO_Port GPIOB
 #define ADC_TIME_MARK_Pin GPIO_PIN_10
 #define ADC_TIME_MARK_GPIO_Port GPIOB
-#define ENCODER_TIME_MARK_Pin GPIO_PIN_11
-#define ENCODER_TIME_MARK_GPIO_Port GPIOB
 #define NTC3_Pin GPIO_PIN_12
 #define NTC3_GPIO_Port GPIOB
 #define LIN1_Pin GPIO_PIN_13

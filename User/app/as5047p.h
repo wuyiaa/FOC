@@ -7,7 +7,6 @@
 #define AS5047P_RAD_PER_COUNT          0.000383495197f
 #define AS5047P_COUNT_PER_RAD          2607.59459f
 #define AS5047P_FAULT_LIMIT            5U
-#define AS5047P_SPI_TIMEOUT_US         20U
 
 /* 0: angle requests only; 1: insert ERRFL reads on parity error or EF. */
 #ifndef AS5047P_ERRFL_AUTO_READ_ENABLE
@@ -40,7 +39,7 @@ typedef struct
     volatile uint32_t transfer_start_phase; /* TIM1 phase for DMA timing. */
     volatile uint32_t transfer_timer_ticks;
     volatile float transfer_time_us;
-    volatile uint32_t read_timer_ticks; /* Whole blocking read, PB11 low. */
+    volatile uint32_t read_timer_ticks; /* Whole blocking read, TIM1 ticks. */
     volatile float read_time_us;
     volatile uint32_t angle_request_cycle;
 
@@ -52,7 +51,6 @@ typedef struct
     volatile uint32_t busy_skip_count;
     volatile uint32_t dma_error_count;
     volatile uint32_t spi_error_count;
-    volatile uint32_t spi_timeout_count;
     /* Latest received word and diagnostics; never reject an angle. */
     volatile uint16_t rx_response_word;
     volatile uint8_t rx_parity_bit;
@@ -79,7 +77,7 @@ typedef struct
 
 void as5047p_init(as5047p_t *encoder);
 HAL_StatusTypeDef as5047p_read_start_dma(as5047p_t *encoder);
-/* One blocking 16-bit frame; RX belongs to the preceding command.
+/* One blocking 16-bit frame, without timeout; RX is the preceding response.
    The FOC sample receives the latest published valid angle. */
 HAL_StatusTypeDef as5047p_read_blocking(as5047p_t *encoder,
                                         as5047p_sample_t *sample);
