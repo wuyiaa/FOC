@@ -51,14 +51,6 @@ void foc_phase_auto_calibration_step(pmsm_t *pm, float v_dc, float v_min)
         return;
     }
 
-    if (((calibration.started != 0U) ||
-         (calibration.drive_start_cycle != 0U)) &&
-        (pm->speed.initialized == 0U))
-    {
-        motor_calibration_fail();
-        return;
-    }
-
     /* Alignment waits for a valid encoder sample before starting. */
     if ((pm->encoder_foc_sample.valid == 0U) &&
         (calibration.state == MOTOR_CAL_STATE_DRIVE))

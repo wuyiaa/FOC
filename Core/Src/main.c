@@ -156,9 +156,9 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    (void)voltage_sample_regular_update();
     voltage_sample_transform_update(pm.foc.electrical_angle_rad,
-                                    calibration.phase_reversed,
-                                    pm.encoder_foc_sample.valid);
+                                    calibration.phase_reversed);
     vofa_process();
     key_control_process();
 

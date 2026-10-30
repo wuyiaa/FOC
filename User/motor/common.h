@@ -132,6 +132,9 @@ typedef struct
     float u_alpha;
     float u_beta;
     float electrical_angle_rad;
+    float sin_theta;
+    float cos_theta;
+    uint8_t angle_valid;
 	  float mechanical_angle_rad;
     volatile uint8_t current_limit_fault;
 } pmsm_foc_t;
@@ -175,14 +178,24 @@ typedef struct
     volatile uint32_t elapsed_ticks;
     volatile uint32_t timer_count;
     volatile uint8_t timer_counting_down;
-    /* Trigger-to-callback latency modulo one PWM period, in milliseconds. */
-    volatile float sample_time_ms;
+    /* Trigger-to-callback latency modulo one PWM period, in microseconds. */
+    volatile float sample_time_us;
     uint8_t active;
     uint8_t done;
     volatile uint8_t adc1_jeos_at_callback;
     volatile uint8_t adc2_jeos_at_callback;
     volatile uint32_t adc2_jeos_not_set_count;
 } pmsm_adc_measure_t;
+
+typedef struct
+{
+    volatile uint32_t start_phase;
+    volatile uint32_t end_phase;
+    volatile uint32_t elapsed_ticks;
+    /* Valid for callback intervals shorter than one TIM1 PWM period. */
+    volatile float execution_time_us;
+    volatile uint8_t done;
+} pmsm_foc_measure_t;
 
 typedef struct
 {
@@ -234,6 +247,7 @@ typedef struct
     pmsm_svpwm_t svpwm;
     pmsm_current_sample_t current_sample;
     pmsm_adc_measure_t adc_measure;
+    pmsm_foc_measure_t foc_measure;
 } pmsm_t;
 
 extern pmsm_t pm;
@@ -245,6 +259,7 @@ void foc_get_curr_off(void);
 void foc_adc_sample(pmsm_t *pm);
 void foc_adc_time_measure_arm(pmsm_t *pm);
 void foc_current_sample_process(pmsm_t *pm);
+void foc_electrical_angle_update(pmsm_t *pm);
 void clarke_transform(pmsm_foc_t *foc, uint8_t full_clarke);
 void inverse_clarke_transform(pmsm_foc_t *foc);
 void park_transform(pmsm_t *pm);

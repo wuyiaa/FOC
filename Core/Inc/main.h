@@ -73,6 +73,8 @@ void Error_Handler(void);
 #define VB_GPIO_Port GPIOC
 #define VC_Pin GPIO_PIN_2
 #define VC_GPIO_Port GPIOC
+#define APH4_Pin GPIO_PIN_3
+#define APH4_GPIO_Port GPIOC
 #define IC_Pin GPIO_PIN_0
 #define IC_GPIO_Port GPIOA
 #define IB_Pin GPIO_PIN_1
@@ -89,6 +91,10 @@ void Error_Handler(void);
 #define NTC1_GPIO_Port GPIOB
 #define NTC2_Pin GPIO_PIN_2
 #define NTC2_GPIO_Port GPIOB
+#define ADC_TIME_MARK_Pin GPIO_PIN_10
+#define ADC_TIME_MARK_GPIO_Port GPIOB
+#define ENCODER_TIME_MARK_Pin GPIO_PIN_11
+#define ENCODER_TIME_MARK_GPIO_Port GPIOB
 #define NTC3_Pin GPIO_PIN_12
 #define NTC3_GPIO_Port GPIOB
 #define LIN1_Pin GPIO_PIN_13
@@ -115,8 +121,6 @@ void Error_Handler(void);
 #define CLK_GPIO_Port GPIOA
 #define CSN_Pin GPIO_PIN_2
 #define CSN_GPIO_Port GPIOD
-#define ADC_TIME_MARK_Pin GPIO_PIN_10
-#define ADC_TIME_MARK_GPIO_Port GPIOB
 #define SCK_Pin GPIO_PIN_3
 #define SCK_GPIO_Port GPIOB
 #define MISO_Pin GPIO_PIN_4

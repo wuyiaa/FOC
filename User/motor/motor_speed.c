@@ -39,10 +39,10 @@ void motor_speed_update(motor_speed_t *speed,
         }
     }
 
-    if (sample->valid == 0U)
-    {
-        return;
-    }
+		if (sample->valid == 0U)
+		{
+				return;
+		}
 
     if (speed->initialized == 0U)
     {

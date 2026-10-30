@@ -61,10 +61,11 @@ extern volatile voltage_sample_t voltage_sample;
 /* Call once after MX_ADC2_Init(), before starting TIM1 CH4. */
 HAL_StatusTypeDef voltage_sample_start(void);
 /* Call only from the ADC1 injected-sequence-complete callback. */
-void voltage_sample_update(void);
-/* Estimate physical winding voltages, then transform to logical alpha/beta/dq. */
+void voltage_sample_bus_update(void);
+/* Main loop: read a completed ADC2 regular DMA scan and update phase voltages. */
+uint8_t voltage_sample_regular_update(void);
+/* Main loop: estimate winding voltages and transform to alpha/beta/dq. */
 void voltage_sample_transform_update(float electrical_angle_rad,
-                                     uint8_t phase_reversed,
-                                     uint8_t angle_valid);
+                                     uint8_t phase_reversed);
 
 #endif /* USER_BSP_VOLTAGE_SAMPLE_H */

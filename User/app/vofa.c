@@ -128,10 +128,19 @@ static uint16_t vofa_packet_build(void)
     const uint32_t low_side_levels = GPIOB->IDR;
     const float vofa_values[] =
     {
+			/*编码器计数报错*/
+//				pm.encoder.parity_error_count,
+//				pm.encoder.sensor_error_count,
+//				pm.encoder.busy_skip_count ,
+//				pm.encoder.encoder_sample_sequence,
+				pm.foc.mechanical_angle_rad,
+		  	pm.foc.electrical_angle_rad,
+			 (float)pm.encoder_foc_sample.raw,
+			
 			/*反馈相电流*/
-//		    pm.foc.ia.nonrecon,   
-//        pm.foc.ib.nonrecon,   
-//        pm.foc.ic.nonrecon,   
+		    pm.foc.ia.nonrecon,   
+        pm.foc.ib.nonrecon,   
+        pm.foc.ic.nonrecon,   
         pm.foc.ia.reconstructed,                  /* CH0: phase A current (A) */
         pm.foc.ib.reconstructed,                  /* CH1: phase B current (A) */
         pm.foc.ic.reconstructed,                  /* CH2: phase C current (A) */
@@ -143,8 +152,8 @@ static uint16_t vofa_packet_build(void)
 				pm.foc.id_fdb,		
 			
 			/*目标相电流*/
-				pm.foc.iq_ref,	
-				pm.foc.id_ref,
+//				pm.foc.iq_ref,	
+//				pm.foc.id_ref,
 			
 //				pm.foc.i_a_ref,                  /* CH0: phase A current (A) */
 //        pm.foc.i_b_ref,                  /* CH1: phase B current (A) */
@@ -157,7 +166,7 @@ static uint16_t vofa_packet_build(void)
 //				(float)ADC2->JDR2, //vbus
 
 			/*电流采样时间*/
-//			pm.adc_measure.sample_time_ms,
+//			pm.adc_measure.sample_time_us,
 //			pm.adc_measure.elapsed_ticks,
 //			pm.adc_measure.timer_count,
 //			pm.adc_measure.timer_counting_down,
@@ -179,38 +188,38 @@ static uint16_t vofa_packet_build(void)
 //			voltage_sample.Ubn,
 //			voltage_sample.Ucn,
 //			voltage_sample.vbus_v,
-//			/*反馈端电压*/
+////			/*反馈端电压*/
 //			voltage_sample.Uag.value,
 //			voltage_sample.Ubg.value,
 //			voltage_sample.Ucg.value,
-////			
+//		
 //			voltage_sample.Uag.average,   
 //      voltage_sample.Ubg.average,   
 //      voltage_sample.Ucg.average,
-			
-			voltage_sample.Ualpha_fdb,
-			voltage_sample.Ubeta_fdb,
+//			
+//			voltage_sample.Ualpha_fdb,
+//			voltage_sample.Ubeta_fdb,
 
-			voltage_sample.Uq_fdb,
-			voltage_sample.Ud_fdb,
+//			voltage_sample.Uq_fdb,
+//			voltage_sample.Ud_fdb,
 			
 			/*目标相电压*/
-//			pm.foc.u_alpha,                 
-//      pm.foc.u_beta,                  
+			pm.foc.u_alpha,                 
+      pm.foc.u_beta,                  
 
 				pm.foc.Uq_ref,
 				pm.foc.Ud_ref,
 						
 //			/*马鞍波*/
-//        (float)pm.svpwm.ccr1,        /* CH9: PWM compare 1 */
-//        (float)pm.svpwm.ccr2,        /* CH10: PWM compare 2 */
-//        (float)pm.svpwm.ccr3,        /* CH11: PWM compare 3 */
+        (float)pm.svpwm.ccr1,        /* CH9: PWM compare 1 */
+        (float)pm.svpwm.ccr2,        /* CH10: PWM compare 2 */
+        (float)pm.svpwm.ccr3,        /* CH11: PWM compare 3 */
 
 			/*电机角度*/		
 //				pm.foc.mechanical_angle_rad,
 //				pm.foc.electrical_angle_rad,
 			/*电机角速度*/
-//			pm.speed.mechanical_rad_s,   /* CH4: mechanical speed (rad/s) */
+			pm.speed.mechanical_rad_s,   /* CH4: mechanical speed (rad/s) */
 
 //        (float)pm.adc_measure.adc1_jeos_at_callback, /* CH5: ADC1 JEOS in callback */
 //        (float)pm.adc_measure.adc2_jeos_at_callback, /* CH6: ADC2 JEOS in callback */

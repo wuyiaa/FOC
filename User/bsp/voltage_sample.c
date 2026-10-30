@@ -33,11 +33,9 @@ static void voltage_sample_park(float v_alpha, float v_beta,
 }
 
 void voltage_sample_transform_update(float electrical_angle_rad,
-                                     uint8_t phase_reversed,
-                                     uint8_t angle_valid)
+                                     uint8_t phase_reversed)
 {
     static uint32_t last_phase_update_count;
-    uint32_t saved_primask;
     uint32_t phase_update_count;
     uint8_t phase_valid;
     float va;
@@ -57,24 +55,18 @@ void voltage_sample_transform_update(float electrical_angle_rad,
         voltage_sample.transform_valid = 0U;
         return;
     }
-    if (angle_valid == 0U)
-    {
-        voltage_sample.transform_valid = 0U;
-    }
+
     if (voltage_sample.phase_update_count == last_phase_update_count)
     {
         return;
     }
 
-    /* The ADC ISR publishes all three phase values. Copy one whole set. */
-    saved_primask = __get_PRIMASK();
-    __disable_irq();
+    /* The main loop publishes and transforms each complete phase sample. */
     phase_update_count = voltage_sample.phase_update_count;
     phase_valid = voltage_sample.phase_valid;
     va = voltage_sample.Uag.value;
     vb = voltage_sample.Ubg.value;
     vc = voltage_sample.Ucg.value;
-    __set_PRIMASK(saved_primask);
 
     if (phase_valid == 0U)
     {
@@ -111,12 +103,6 @@ void voltage_sample_transform_update(float electrical_angle_rad,
 
     voltage_sample.Ualpha_fdb = v_alpha;
     voltage_sample.Ubeta_fdb = v_beta;
-    if (angle_valid == 0U)
-    {
-        voltage_sample.transform_valid = 0U;
-        last_phase_update_count = phase_update_count;
-        return;
-    }
 
     voltage_sample_park(v_alpha, v_beta, electrical_angle_rad, &v_d, &v_q);
     voltage_sample.Ud_fdb = v_d;
@@ -152,8 +138,8 @@ HAL_StatusTypeDef voltage_sample_start(void)
         return status;
     }
 
-    /* Continuous scans are faster than the FOC loop. Poll completed blocks
-       there instead of generating a DMA interrupt for every half/full block.
+    /* Continuous scans are polled in main instead of generating a DMA
+       interrupt for every half/full block.
        Transfer-error interrupts remain enabled. */
     __HAL_DMA_DISABLE_IT(hadc2.DMA_Handle, DMA_IT_HT | DMA_IT_TC);
     return HAL_OK;
@@ -187,7 +173,7 @@ static void voltage_sample_average_update(uint16_t va, uint16_t vb, uint16_t vc)
     voltage_sample.Ucg.average = (float)sums[2] * scale;
 }
 
-static uint8_t voltage_sample_regular_update(void)
+uint8_t voltage_sample_regular_update(void)
 {
     DMA_HandleTypeDef *dma = hadc2.DMA_Handle;
     uint32_t remaining_before;
@@ -196,6 +182,13 @@ static uint8_t voltage_sample_regular_update(void)
     uint16_t va;
     uint16_t vb;
     uint16_t vc;
+
+    if (HAL_ADC_GetError(&hadc2) != HAL_ADC_ERROR_NONE)
+    {
+        voltage_sample.phase_valid = 0U;
+        voltage_sample.transform_valid = 0U;
+        return 0U;
+    }
 
     remaining_before = __HAL_DMA_GET_COUNTER(dma);
     if ((remaining_before == 0U) || (remaining_before > VOLTAGE_DMA_COUNT))
@@ -245,7 +238,7 @@ static uint8_t voltage_sample_regular_update(void)
     return 1U;
 }
 
-void voltage_sample_update(void)
+void voltage_sample_bus_update(void)
 {
     uint16_t raw;
 
@@ -253,9 +246,7 @@ void voltage_sample_update(void)
     voltage_sample.adc_error_code = HAL_ADC_GetError(&hadc2);
     if (voltage_sample.adc_error_code != HAL_ADC_ERROR_NONE)
     {
-        voltage_sample.phase_valid = 0U;
         voltage_sample.bus_valid = 0U;
-        voltage_sample.transform_valid = 0U;
         return;
     }
 
@@ -276,6 +267,4 @@ void voltage_sample_update(void)
         /* Keep the previous value when no new completed sequence is available. */
         voltage_sample.bus_not_ready_count++;
     }
-
-    (void)voltage_sample_regular_update();
 }

@@ -13,7 +13,55 @@ static uint8_t foc_current_trip_reached(const pmsm_foc_t *foc)
                      (foc->ic.reconstructed <= -current_limit));
 }
 
-static float adc_timer_tick_ms;
+static float adc_timer_tick_us;
+
+/* Map the up/down counter to a phase in [0, 2 * ARR]. */
+static uint32_t foc_timer_phase_get(void)
+{
+    uint32_t direction_before;
+    uint32_t direction_after;
+    uint32_t count;
+
+    do
+    {
+        direction_before = TIM1->CR1 & TIM_CR1_DIR;
+        count = TIM1->CNT;
+        direction_after = TIM1->CR1 & TIM_CR1_DIR;
+    } while (direction_before != direction_after);
+
+    return (direction_after != 0U) ? (2U * TIM1->ARR - count) : count;
+}
+
+static void foc_callback_time_measure_begin(pmsm_t *pm)
+{
+    ADC_TIME_MARK_GPIO_Port->BSRR = (uint32_t)ADC_TIME_MARK_Pin << 16U;
+    pm->foc_measure.start_phase = foc_timer_phase_get();
+    pm->foc_measure.done = 0U;
+}
+
+static void foc_callback_time_measure_end(pmsm_t *pm)
+{
+    uint32_t end_phase = foc_timer_phase_get();
+    uint32_t start_phase;
+    uint32_t period;
+
+    ADC_TIME_MARK_GPIO_Port->BSRR = ADC_TIME_MARK_Pin;
+    start_phase = pm->foc_measure.start_phase;
+    period = 2U * TIM1->ARR;
+    pm->foc_measure.end_phase = end_phase;
+    if (period == 0U)
+    {
+        pm->foc_measure.done = 0U;
+        return;
+    }
+
+    /* Modulo one PWM period: full additional periods cannot be detected. */
+    pm->foc_measure.elapsed_ticks = (end_phase >= start_phase) ?
+        (end_phase - start_phase) : (period - start_phase + end_phase);
+    pm->foc_measure.execution_time_us =
+        (float)pm->foc_measure.elapsed_ticks * adc_timer_tick_us;
+    pm->foc_measure.done = 1U;
+}
 
 static void foc_adc_time_measure_update(pmsm_t *pm)
 {
@@ -29,14 +77,11 @@ static void foc_adc_time_measure_update(pmsm_t *pm)
         return;
     }
 
-    /* PB10 / CN9 pin 4 rising edge marks the following CNT read.
-       On a direction-change retry, the last rising edge is the valid one.
-       The pulse width is timing-code execution, not ADC conversion time. */
+    /* PB10 is held low by the caller throughout this ADC1 callback.
+       Retry the CNT snapshot if the timer reverses while it is read. */
     do
     {
-        ADC_TIME_MARK_GPIO_Port->BSRR = (uint32_t)ADC_TIME_MARK_Pin << 16U;
         direction_before = TIM1->CR1 & TIM_CR1_DIR;
-        ADC_TIME_MARK_GPIO_Port->BSRR = ADC_TIME_MARK_Pin;
         count = TIM1->CNT;
         direction_after = TIM1->CR1 & TIM_CR1_DIR;
     } while (direction_before != direction_after);
@@ -49,7 +94,6 @@ static void foc_adc_time_measure_update(pmsm_t *pm)
     if ((period == 0U) || (trigger > TIM1->ARR))
     {
         pm->adc_measure.done = 0U;
-        ADC_TIME_MARK_GPIO_Port->BSRR = (uint32_t)ADC_TIME_MARK_Pin << 16U;
         return;
     }
     phase = (direction_after != 0U) ? (period - count) : count;
@@ -57,68 +101,50 @@ static void foc_adc_time_measure_update(pmsm_t *pm)
         (phase >= trigger) ? (phase - trigger) : (period - trigger + phase);
     pm->adc_measure.timer_count = count;
     pm->adc_measure.timer_counting_down = (direction_after != 0U) ? 1U : 0U;
-    pm->adc_measure.sample_time_ms =
-        (float)pm->adc_measure.elapsed_ticks * adc_timer_tick_ms;
+    pm->adc_measure.sample_time_us =
+        (float)pm->adc_measure.elapsed_ticks * adc_timer_tick_us;
     pm->adc_measure.done = 1U;
-    ADC_TIME_MARK_GPIO_Port->BSRR = (uint32_t)ADC_TIME_MARK_Pin << 16U;
 }
 
 void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 {
     if (hadc->Instance == ADC1)
     {
+        /* PB10 low pulse spans ADC1 callback processing, including SPI/FOC. */
+        foc_callback_time_measure_begin(&pm);
         foc_adc_time_measure_update(&pm);
 
         if (pm.adc.offset_ready == 0U)
         {
-            voltage_sample_update();
+            voltage_sample_bus_update();
+            foc_callback_time_measure_end(&pm);
             return;
         }
-
-        /* Read injected VBUS and DMA voltages after the timing marker so processing
-           does not add to the measured ADC conversion latency. */
-        voltage_sample_update();
-
-        /* FOC uses one coherent copy of the most recently published angle. */
-        (void)as5047p_latest_get(&pm.encoder, &pm.encoder_foc_sample);
-        motor_speed_update(&pm.speed, &pm.encoder_foc_sample,
-                           pm.motor.pn, DWT->CYCCNT);
-
-//        if (as5047p_protection_update(&pm.encoder,
-//                                      &pm.encoder_foc_sample) != 0U)
-//        {
-//            /* Latch the encoder fault and immediately gate CH1-CH3/CH1N-CH3N. */
-//            __HAL_TIM_MOE_DISABLE_UNCONDITIONALLY(&htim1);
-//            HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, GPIO_PIN_SET);
-//        }
 
         foc_adc_sample(&pm);
         foc_current_sample_process(&pm);
+        voltage_sample_bus_update();
 
-        /* Keep a hard phase-current trip as an independent safety backup. */
-        if ((pm.foc.current_limit_fault != 0U) ||
-            (foc_current_trip_reached(&pm.foc) != 0U))
-        {
-            pm.foc.current_limit_fault = 1U;
-            foc_pwm_output_disable();
-            HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, GPIO_PIN_SET);
-            (void)as5047p_read_start_dma(&pm.encoder);
-            return;
-        }
+//        /* Complete one SPI frame and update this FOC cycle's angle sample. */
+        (void)as5047p_read_blocking(&pm.encoder, &pm.encoder_foc_sample);
+
+        foc_electrical_angle_update(&pm);
+
+        motor_speed_update(&pm.speed, &pm.encoder_foc_sample,
+                           pm.motor.pn, DWT->CYCCNT);
 
         foc_current_calc(&pm);
 #if ((FOC_ENCODER_ZERO_CALIBRATION_MODE == 0U) && \
      (FOC_PHASE_AUTO_CALIBRATION_MODE == 0U))
 				pm.foc.id_ref = 0.0f;
-				pm.foc.iq_ref = 0.1f;
+				pm.foc.iq_ref = 0.5f;
         foc_current_pid_update(&pm, PWM_PERIOD_S);
 #endif
 //				pm.foc.Ud_ref = 0.0f;
-//				pm.foc.Uq_ref = 13.2f;
-        foc_voltage_calc(&pm, voltage_sample.vbus_v, pm.svpwm.vref2_min);
+//				pm.foc.Uq_ref = 13.66f;
+        foc_voltage_calc(&pm, voltage_sample.vbus_v, pm.svpwm.vref2_min);//voltage_sample.vbus_v pm.svpwm.vref2_min
         foc_pwm_output_update(&pm);
-        /* Start the next pipelined encoder DMA frame, then leave immediately. */
-        (void)as5047p_read_start_dma(&pm.encoder);
+        foc_callback_time_measure_end(&pm);
     }
 }
 
@@ -131,13 +157,19 @@ void foc_adc_time_measure_arm(pmsm_t *pm)
     {
         timer_clock_hz *= 2U;
     }
-    adc_timer_tick_ms = 1000.0f * (float)(TIM1->PSC + 1U) /
+    adc_timer_tick_us = 1000000.0f * (float)(TIM1->PSC + 1U) /
                         (float)timer_clock_hz;
-    pm->adc_measure.sample_time_ms = 0.0f;
+    pm->adc_measure.sample_time_us = 0.0f;
     pm->adc_measure.elapsed_ticks = 0U;
     pm->adc_measure.timer_count = 0U;
     pm->adc_measure.timer_counting_down = 0U;
     pm->adc_measure.done = 0U;
+
+    pm->foc_measure.start_phase = 0U;
+    pm->foc_measure.end_phase = 0U;
+    pm->foc_measure.elapsed_ticks = 0U;
+    pm->foc_measure.execution_time_us = 0.0f;
+    pm->foc_measure.done = 0U;
 
     /* Only disable the software timing IRQ; hardware ADC triggering remains. */
     __HAL_TIM_DISABLE_IT(&htim1, TIM_IT_CC4);

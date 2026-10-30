@@ -15,7 +15,7 @@
 #define FOC_CURRENT_OUTPUT_LIMIT_V \
     (FOC_DC_BUS_VOLTAGE_V * FOC_CURRENT_OUTPUT_UTILIZATION_INITIAL * ONE_BY_SQRT3)
 
-volatile float FOC_CURRENT_LOOP_BANDWIDTH_DEFAULT_HZ = 2500.0f;
+volatile float FOC_CURRENT_LOOP_BANDWIDTH_DEFAULT_HZ = 250.0f;
 volatile float FOC_CURRENT_OUTPUT_UTILIZATION = FOC_CURRENT_OUTPUT_UTILIZATION_INITIAL;
 static float applied_bandwidth_hz = -1.0f;
 static float applied_output_utilization = -1.0f;
@@ -175,7 +175,6 @@ void foc_current_pid_init(void)
 void foc_current_pid_update(pmsm_t *pm, float dt)
 {
     if ((pm == NULL) ||
-        (pm->encoder_foc_sample.valid == 0U) ||
         (pm->encoder.fault != 0U) ||
         (pm->foc.current_limit_fault != 0U))
     {
@@ -184,11 +183,11 @@ void foc_current_pid_update(pmsm_t *pm, float dt)
 
     foc_current_pid_parameters_update();
 
-    pm->foc.Ud_ref = pid_calculate(&foc_id_pid,
+    pm->foc.Ud_ref = -pid_calculate(&foc_id_pid,
                                 pm->foc.id_ref,
                                 pm->foc.id_fdb,
                                 dt);
-    pm->foc.Uq_ref = pid_calculate(&foc_iq_pid,
+    pm->foc.Uq_ref = -pid_calculate(&foc_iq_pid,
                                 pm->foc.iq_ref,
                                 pm->foc.iq_fdb,
                                 dt);

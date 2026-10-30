@@ -14,18 +14,6 @@ static float foc_abs(float value)
     return (value < 0.0f) ? -value : value;
 }
 
-static uint8_t current_window_is_valid(const pmsm_current_sample_t *sample)
-{
-    if ((sample->window_a_valid == 0U) ||
-        (sample->window_b_valid == 0U) ||
-        (sample->window_c_valid == 0U))
-    {
-        return 0U;
-    }
-
-    return 1U;
-}
-
 static uint16_t current_window_get(uint16_t pwm_cmp)
 {
     if (pwm_cmp >= PWM_PERIOD_TICKS)
@@ -126,15 +114,10 @@ void foc_current_sample_process(pmsm_t *pm)
     sample->window_a_valid = (uint8_t)(sample->window_a >= ADC_SAMPLE_TOTAL_TICKS);
     sample->window_b_valid = (uint8_t)(sample->window_b >= ADC_SAMPLE_TOTAL_TICKS);
     sample->window_c_valid = (uint8_t)(sample->window_c >= ADC_SAMPLE_TOTAL_TICKS);
-//    sample->window_valid = current_window_is_valid(sample);
+
     sample->full_clarke = 1U;
     sample->reconstructed_phase = PMSM_PHASE_NONE;
 
-    if (sample->window_valid == 0U)
-    {
-        sample->reconstructed_phase = max_current_phase_get(&pm->foc);
-        sample->full_clarke = 0U;
-    }
 #if (CURRENT_RECONSTRUCTION_MODE == CURRENT_RECONSTRUCTION_MIN_WINDOW)
 //		if(sample->window_valid)//因为有三相都有效的时候，如果只是无效的时候启用，容易三相都有效的时候畸形
 //		{
@@ -171,17 +154,11 @@ void inverse_clarke_transform(pmsm_foc_t *foc)
 }
 
 float theta_e;
-static uint8_t foc_electrical_angle_get(pmsm_t *pm,
-                                       float *sin_theta,
-                                       float *cos_theta)
+void foc_electrical_angle_update(pmsm_t *pm)
 {
     uint32_t corrected_mechanical_count;
     uint32_t electrical_count;
 
-    if (pm->encoder_foc_sample.valid == 0U)
-    {
-        return 0U;
-    }
     /* Keep the DMA-published raw angle untouched; compensate only for FOC. */
     corrected_mechanical_count =
         ((uint32_t)pm->encoder_foc_sample.raw +
@@ -194,33 +171,40 @@ static uint8_t foc_electrical_angle_get(pmsm_t *pm,
 		//MOTOR_MECHANICAL_DRV *
 		pm->foc.mechanical_angle_rad = (float)calibration.electrical_direction * 
         (float)corrected_mechanical_count * AS5047P_RAD_PER_COUNT;
+		
+
+		
     /* Both Park and inverse Park use electrical zero during zero calibration. */
     if (encoder_zero_calibration_requested != 0U)
     {
         pm->foc.electrical_angle_rad = 0.0f;
+        pm->foc.sin_theta = 0.0f;
+        pm->foc.cos_theta = 1.0f;
     }
     else
     {
         pm->foc.electrical_angle_rad = (float)calibration.electrical_direction *
             (float)electrical_count * AS5047P_RAD_PER_COUNT;
-    }
-//theta_e +=0.00005*10;
-//pm->foc.electrical_angle_rad=theta_e;
-    *sin_theta = sinf(pm->foc.electrical_angle_rad);
-    *cos_theta = cosf(pm->foc.electrical_angle_rad);
+				
+//theta_e += 100 * PWM_PERIOD_S;  // PWM_PERIOD_S = 0.00005f
 
-    return 1U;
+//if (theta_e >= TWO_PI)
+//{
+//    theta_e -= TWO_PI;
+//}
+
+//pm->foc.electrical_angle_rad = theta_e;
+				
+        pm->foc.sin_theta = sinf(pm->foc.electrical_angle_rad);
+        pm->foc.cos_theta = cosf(pm->foc.electrical_angle_rad);
+    }
+
 }
 
 void park_transform(pmsm_t *pm)
 {
-    float sin_theta;
-    float cos_theta;
-
-    if (foc_electrical_angle_get(pm, &sin_theta, &cos_theta) == 0U)
-    {
-        return;
-    }
+    const float sin_theta = pm->foc.sin_theta;
+    const float cos_theta = pm->foc.cos_theta;
 
     pm->foc.id_fdb = pm->foc.i_alpha * cos_theta
                 + pm->foc.i_beta * sin_theta;
@@ -239,21 +223,28 @@ void inverse_park_transform(pmsm_t *pm)
     float sin_theta;
     float cos_theta;
 
-    if (foc_electrical_angle_get(pm, &sin_theta, &cos_theta) == 0U)
+    /* Calibration may request alignment after this callback's Park step. */
+    if (encoder_zero_calibration_requested != 0U)
     {
-        return;
+        pm->foc.electrical_angle_rad = 0.0f;
+        pm->foc.sin_theta = 0.0f;
+        pm->foc.cos_theta = 1.0f;
     }
+//		pm->foc.sin_theta = 0.0f;
+//        pm->foc.cos_theta = 1.0f;
+    sin_theta = pm->foc.sin_theta;
+    cos_theta = pm->foc.cos_theta;
 
-//		pm->foc.Ud_ref = 0;
-//		pm->foc.Uq_ref = 0.66;
+//		pm->foc.Ud_ref = 2.0f;
+//		pm->foc.Uq_ref = 0.0f;
 		
     /* Inverse of the Park convention used above. */
     pm->foc.u_alpha = pm->foc.Ud_ref * cos_theta
                     - pm->foc.Uq_ref * sin_theta;
     pm->foc.u_beta  = pm->foc.Ud_ref * sin_theta
                     + pm->foc.Uq_ref * cos_theta;
-//		pm->foc.u_alpha = 2.5f;//2.5f; 5.0f
-//		pm->foc.u_beta  = 4.33f;//4.33f 0.0f
+//		pm->foc.u_alpha = 15.5f;//2.5f; 5.0f
+//		pm->foc.u_beta  = 0.0f;//4.33f 0.0f
 }
 
 static uint16_t svpwm_ccr_from_time(float phase_time, float period)
@@ -416,10 +407,10 @@ void foc_voltage_calc(pmsm_t *pm, float v_dc, float v_min)
 #elif (FOC_ENCODER_ZERO_CALIBRATION_MODE != 0U)
     foc_encoder_zero_calibration_step(pm, v_dc, v_min);
 #else
-    if (pm->encoder_foc_sample.valid == 0U)
-    {
-        return;
-    }
+//    if (pm->encoder_foc_sample.valid == 0U)
+//    {
+//        return;
+//    }
 
     inverse_park_transform(pm);
 		inverse_clarke_transform(&pm->foc);
