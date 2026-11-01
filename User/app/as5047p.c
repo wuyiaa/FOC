@@ -3,6 +3,7 @@
 #include <stddef.h>
 
 #include "spi.h"
+#include "sample_time.h"
 
 #define AS5047P_READ_BIT               0x4000U
 #define AS5047P_PARITY_BIT             0x8000U
@@ -14,9 +15,6 @@
 #define AS5047P_ERRFL_FRERR_BIT        0x0001U
 
 static as5047p_t *as5047p_active_encoder;
-static float as5047p_timer_tick_us;
-static uint32_t as5047p_timer_phase_get(void);
-static uint32_t as5047p_timer_elapsed(uint32_t start_phase);
 static void as5047p_response_process(as5047p_t *encoder, uint16_t response,
                                      as5047p_sample_t *sample);
 
@@ -84,21 +82,10 @@ static void as5047p_publish(as5047p_t *encoder,
 
 void as5047p_init(as5047p_t *encoder)
 {
-    uint32_t timer_clock_hz;
-
     if (encoder == NULL)
     {
         return;
     }
-
-    /* TIM1 is configured and running before encoder initialization. */
-    timer_clock_hz = HAL_RCC_GetPCLK2Freq();
-    if ((RCC->CFGR & RCC_CFGR_PPRE2) != 0U)
-    {
-        timer_clock_hz *= 2U;
-    }
-    as5047p_timer_tick_us = 1000000.0f * (float)(TIM1->PSC + 1U) /
-                            (float)timer_clock_hz;
 
     encoder->state = AS5047P_IDLE;
     encoder->pipeline_primed = 0U;
@@ -166,7 +153,7 @@ HAL_StatusTypeDef as5047p_read_start_dma(as5047p_t *encoder)
 
     /* DWT is only the angle timestamp; TIM1 measures transfer duration. */
     encoder->transfer_start_cycle = DWT->CYCCNT;
-    encoder->transfer_start_phase = as5047p_timer_phase_get();
+    encoder->transfer_start_phase = sample_start_time();
     CSN_GPIO_Port->BSRR = (uint32_t)CSN_Pin << 16U;
     status = HAL_SPI_TransmitReceive_DMA(&hspi1,
                                         (uint8_t *)&encoder->tx_word,
@@ -203,33 +190,6 @@ HAL_StatusTypeDef as5047p_read_start_dma(as5047p_t *encoder)
     return status;
 }
 
-/* Unfold center-aligned TIM1 into a phase from 0 to 2 * ARR. */
-static uint32_t as5047p_timer_phase_get(void)
-{
-    uint32_t direction_before;
-    uint32_t direction_after;
-    uint32_t count;
-
-    do
-    {
-        direction_before = TIM1->CR1 & TIM_CR1_DIR;
-        count = TIM1->CNT;
-        direction_after = TIM1->CR1 & TIM_CR1_DIR;
-    } while (direction_before != direction_after);
-
-    return (direction_after != 0U) ? (2U * TIM1->ARR - count) : count;
-}
-
-/* Valid for elapsed times below one PWM period (currently 50 us). */
-static uint32_t as5047p_timer_elapsed(uint32_t start_phase)
-{
-    uint32_t end_phase = as5047p_timer_phase_get();
-    uint32_t period = 2U * TIM1->ARR;
-
-    return (end_phase >= start_phase) ?
-        (end_phase - start_phase) : (period - start_phase + end_phase);
-}
-
 /* Poll SPI status only; timing snapshots are outside the wait loops. */
 static HAL_StatusTypeDef as5047p_wait_spi(uint32_t flag, uint32_t expected)
 {
@@ -255,7 +215,6 @@ HAL_StatusTypeDef as5047p_read_blocking(as5047p_t *encoder,
     HAL_StatusTypeDef status;
     uint32_t start_phase;
     uint32_t read_start_phase;
-    uint32_t read_elapsed_ticks;
     uint32_t i;
     uint8_t tx_is_errfl;
     uint16_t response;
@@ -273,7 +232,7 @@ HAL_StatusTypeDef as5047p_read_blocking(as5047p_t *encoder,
     }
 
     /* TIM1 CNT/direction snapshots measure the whole blocking read. */
-    read_start_phase = as5047p_timer_phase_get();
+    read_start_phase = sample_start_time();
 
     hspi1.Lock = HAL_LOCKED;
     hspi1.State = HAL_SPI_STATE_BUSY_TX_RX;
@@ -292,7 +251,7 @@ HAL_StatusTypeDef as5047p_read_blocking(as5047p_t *encoder,
                                   SPI_CR2_TXEIE | SPI_CR2_RXNEIE | SPI_CR2_ERRIE);
     __HAL_SPI_ENABLE(&hspi1);
     encoder->transfer_start_cycle = DWT->CYCCNT;
-    start_phase = as5047p_timer_phase_get();
+    start_phase = sample_start_time();
     CSN_GPIO_Port->BSRR = (uint32_t)CSN_Pin << 16U;
     status = as5047p_wait_spi(SPI_SR_TXE, SPI_SR_TXE);
     if (status == HAL_OK)
@@ -307,9 +266,8 @@ HAL_StatusTypeDef as5047p_read_blocking(as5047p_t *encoder,
     }
 
     CSN_GPIO_Port->BSRR = CSN_Pin;
-    encoder->transfer_timer_ticks = as5047p_timer_elapsed(start_phase);
-    encoder->transfer_time_us =
-        (float)encoder->transfer_timer_ticks * as5047p_timer_tick_us;
+    encoder->transfer_time_us = sample_elapsed_time_record_us(
+        start_phase, sample_start_time(), &encoder->transfer_timer_ticks);
 
     if (status == HAL_OK)
     {
@@ -351,9 +309,8 @@ HAL_StatusTypeDef as5047p_read_blocking(as5047p_t *encoder,
     hspi1.Lock = HAL_UNLOCKED;
     __DMB();
     encoder->state = AS5047P_IDLE;
-    read_elapsed_ticks = as5047p_timer_elapsed(read_start_phase);
-    encoder->read_timer_ticks = read_elapsed_ticks;
-    encoder->read_time_us = (float)read_elapsed_ticks * as5047p_timer_tick_us;
+    encoder->read_time_us = sample_elapsed_time_record_us(
+        read_start_phase, sample_start_time(), &encoder->read_timer_ticks);
     return status;
 }
 
@@ -428,10 +385,9 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
         return;
     }
 
-    encoder->transfer_timer_ticks =
-        as5047p_timer_elapsed(encoder->transfer_start_phase);
-    encoder->transfer_time_us =
-        (float)encoder->transfer_timer_ticks * as5047p_timer_tick_us;
+    encoder->transfer_time_us = sample_elapsed_time_record_us(
+        encoder->transfer_start_phase, sample_start_time(),
+        &encoder->transfer_timer_ticks);
 
     if (encoder->state != AS5047P_ACTIVE)
     {

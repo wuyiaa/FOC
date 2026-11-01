@@ -602,6 +602,16 @@
           <GroupName>User/app</GroupName>
           <Files>
             <File>
+              <FileName>trig_lut.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../User/app/trig_lut.c</FilePath>
+            </File>
+            <File>
+              <FileName>trig_lut.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../User/app/trig_lut.h</FilePath>
+            </File>
+            <File>
               <FileName>key_control.c</FileName>
               <FileType>1</FileType>
               <FilePath>../User/app/key_control.c</FilePath>
@@ -636,6 +646,16 @@
         <Group>
           <GroupName>User/bsp</GroupName>
           <Files>
+            <File>
+              <FileName>sample_time.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../User/bsp/sample_time.c</FilePath>
+            </File>
+            <File>
+              <FileName>sample_time.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../User/bsp/sample_time.h</FilePath>
+            </File>
             <File>
               <FileName>pwm_capture.c</FileName>
               <FileType>1</FileType>

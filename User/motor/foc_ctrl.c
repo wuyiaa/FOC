@@ -1,5 +1,6 @@
 #include "common.h"
 #include "voltage_sample.h"
+#include "sample_time.h"
 
 //static uint8_t foc_current_trip_reached(const pmsm_foc_t *foc)
 //{
@@ -13,35 +14,16 @@
 //                     (foc->ic.reconstructed <= -current_limit));
 //}
 
-static float adc_timer_tick_us;
-
-/* Map the up/down counter to a phase in [0, 2 * ARR]. */
-static uint32_t foc_timer_phase_get(void)
-{
-    uint32_t direction_before;
-    uint32_t direction_after;
-    uint32_t count;
-
-    do
-    {
-        direction_before = TIM1->CR1 & TIM_CR1_DIR;
-        count = TIM1->CNT;
-        direction_after = TIM1->CR1 & TIM_CR1_DIR;
-    } while (direction_before != direction_after);
-
-    return (direction_after != 0U) ? (2U * TIM1->ARR - count) : count;
-}
-
 static void foc_callback_time_measure_begin(pmsm_t *pm)
 {
     ADC_TIME_MARK_GPIO_Port->BSRR = (uint32_t)ADC_TIME_MARK_Pin << 16U;
-    pm->foc_measure.start_phase = foc_timer_phase_get();
+    pm->foc_measure.start_phase = sample_start_time();
     pm->foc_measure.done = 0U;
 }
 
 static void foc_callback_time_measure_end(pmsm_t *pm)
 {
-    uint32_t end_phase = foc_timer_phase_get();
+    uint32_t end_phase = sample_start_time();
     uint32_t start_phase;
     uint32_t period;
 
@@ -55,19 +37,14 @@ static void foc_callback_time_measure_end(pmsm_t *pm)
         return;
     }
 
-    /* Modulo one PWM period: full additional periods cannot be detected. */
-    pm->foc_measure.elapsed_ticks = (end_phase >= start_phase) ?
-        (end_phase - start_phase) : (period - start_phase + end_phase);
-    pm->foc_measure.execution_time_us =
-        (float)pm->foc_measure.elapsed_ticks * adc_timer_tick_us;
+    pm->foc_measure.foc_time_us = sample_elapsed_time_record_us(
+        start_phase, end_phase, &pm->foc_measure.elapsed_ticks);
     pm->foc_measure.done = 1U;
 }
 
 static void foc_adc_time_measure_update(pmsm_t *pm)
 {
-    uint32_t direction_before;
-    uint32_t direction_after;
-    uint32_t count;
+    sample_time_point_t point;
     uint32_t period;
     uint32_t phase;
     uint32_t trigger;
@@ -77,14 +54,8 @@ static void foc_adc_time_measure_update(pmsm_t *pm)
         return;
     }
 
-    /* PB10 is held low by the caller throughout this ADC1 callback.
-       Retry the CNT snapshot if the timer reverses while it is read. */
-    do
-    {
-        direction_before = TIM1->CR1 & TIM_CR1_DIR;
-        count = TIM1->CNT;
-        direction_after = TIM1->CR1 & TIM_CR1_DIR;
-    } while (direction_before != direction_after);
+    /* Keep the raw CNT/direction diagnostics from this same time point. */
+    phase = sample_time_point_get(&point);
 
     /* Center-aligned mode 2: CC4 compare event on the up-count.
        This is a modulo-one-PWM-period latency, not pure ADC conversion time.
@@ -96,16 +67,21 @@ static void foc_adc_time_measure_update(pmsm_t *pm)
         pm->adc_measure.done = 0U;
         return;
     }
-    phase = (direction_after != 0U) ? (period - count) : count;
-    pm->adc_measure.elapsed_ticks =
-        (phase >= trigger) ? (phase - trigger) : (period - trigger + phase);
-    pm->adc_measure.timer_count = count;
-    pm->adc_measure.timer_counting_down = (direction_after != 0U) ? 1U : 0U;
-    pm->adc_measure.sample_time_us =
-        (float)pm->adc_measure.elapsed_ticks * adc_timer_tick_us;
+    pm->adc_measure.timer_count = point.timer_count;
+    pm->adc_measure.timer_counting_down = point.counting_down;
+    pm->adc_measure.sample_time_us = sample_elapsed_time_record_us(
+        trigger, phase, &pm->adc_measure.elapsed_ticks);
     pm->adc_measure.done = 1U;
 }
 
+/*
+- PC3  下降沿：ADC 开始采样的触发时刻。							上降沿：向下计数越过 3900：PC3 从低变高，产生上升沿。
+- PB10 下降沿：ADC 转换完成后，CPU 进入回调的标记。 上降沿：回调完成。
+- 两者下降沿之间的间隔：ADC 采样、转换及中断响应时间。
+- PC3 低电平时间：无意义
+- PB10低电平时间：回调执行时间
+- 只有下管的导通时间覆盖了adc的采样起始点（3900）以及adc的结束点的这段时间，电流采样才不会失真
+*/
 void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 {
     if (hadc->Instance == ADC1)
@@ -137,12 +113,12 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
         foc_current_calc(&pm);
 #if ((FOC_ENCODER_ZERO_CALIBRATION_MODE == 0U) && \
      (FOC_PHASE_AUTO_CALIBRATION_MODE == 0U))
-//				pm.foc.id_ref = 0.0f;
-//				pm.foc.iq_ref = 0.5f;
-//        foc_current_pid_update(&pm, PWM_PERIOD_S);
+				pm.foc.id_ref = 0.0f;
+				pm.foc.iq_ref = 0.5f;
+        foc_current_pid_update(&pm, PWM_PERIOD_S);
 #endif
-				pm.foc.Ud_ref = 0.0f;
-				pm.foc.Uq_ref = 13.66f;
+//				pm.foc.Ud_ref = 0.0f;
+//				pm.foc.Uq_ref = 13.66f;
         foc_voltage_calc(&pm, voltage_sample.vbus_v, pm.svpwm.vref2_min);//voltage_sample.vbus_v pm.svpwm.vref2_min
         foc_pwm_output_update(&pm);
         foc_callback_time_measure_end(&pm);
@@ -151,15 +127,6 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 
 void foc_adc_time_measure_arm(pmsm_t *pm)
 {
-    uint32_t timer_clock_hz = HAL_RCC_GetPCLK2Freq();
-
-    /* STM32G4 timer clock doubles when the APB2 prescaler is not one. */
-    if ((RCC->CFGR & RCC_CFGR_PPRE2) != 0U)
-    {
-        timer_clock_hz *= 2U;
-    }
-    adc_timer_tick_us = 1000000.0f * (float)(TIM1->PSC + 1U) /
-                        (float)timer_clock_hz;
     pm->adc_measure.sample_time_us = 0.0f;
     pm->adc_measure.elapsed_ticks = 0U;
     pm->adc_measure.timer_count = 0U;
@@ -169,7 +136,7 @@ void foc_adc_time_measure_arm(pmsm_t *pm)
     pm->foc_measure.start_phase = 0U;
     pm->foc_measure.end_phase = 0U;
     pm->foc_measure.elapsed_ticks = 0U;
-    pm->foc_measure.execution_time_us = 0.0f;
+    pm->foc_measure.foc_time_us = 0.0f;
     pm->foc_measure.done = 0U;
 
     /* Only disable the software timing IRQ; hardware ADC triggering remains. */

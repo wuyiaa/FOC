@@ -391,9 +391,7 @@ void foc_encoder_zero_calibration_step(pmsm_t *pm, float v_dc, float v_min)
     {
         return;
     }
-    if ((pm->encoder.fault != 0U) ||
-        (pm->foc.current_limit_fault != 0U) ||
-        (calibration.failed != 0U) ||
+    if ((calibration.failed != 0U) ||
         (calibration.done != 0U))
     {
         encoder_zero_calibration_requested = 0U;

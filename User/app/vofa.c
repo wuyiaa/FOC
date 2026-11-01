@@ -62,7 +62,8 @@ volatile float vofa_send_frequency_hz;
 static uint32_t vofa_send_time_last;
 static uint32_t vofa_send_tick_last;
 static uint8_t vofa_send_time_valid;
-
+//extern float sinf_e;
+//extern float cosf_e;
 static void vofa_send_time_update(void)
 {
     const uint32_t now_tick = HAL_GetTick();
@@ -133,17 +134,23 @@ static uint16_t vofa_packet_build(void)
 //				pm.encoder.sensor_error_count,
 //				pm.encoder.busy_skip_count ,
 //				pm.encoder.encoder_sample_sequence,
-				pm.foc.mechanical_angle_rad,
-		  	pm.foc.electrical_angle_rad,
-			 (float)pm.encoder_foc_sample.raw,
-			
+//				pm.foc.mechanical_angle_rad,
+//		  	pm.foc.electrical_angle_rad,
+//			 (float)pm.encoder_foc_sample.raw,
+//			calibration.current_direction,
+//			 sinf_e,
+//			 cosf_e,
+//			 pm.foc.sin_theta, 
+//			 pm.foc.cos_theta,
+//			 sinf_e-pm.foc.sin_theta,
+//			 cosf_e-pm.foc.cos_theta,
 			/*反馈相电流*/
-		    pm.foc.ia.nonrecon,   
-        pm.foc.ib.nonrecon,   
-        pm.foc.ic.nonrecon,   
-        pm.foc.ia.reconstructed,                  /* CH0: phase A current (A) */
-        pm.foc.ib.reconstructed,                  /* CH1: phase B current (A) */
-        pm.foc.ic.reconstructed,                  /* CH2: phase C current (A) */
+				pm.foc.ia.nonrecon,   
+				pm.foc.ib.nonrecon,   
+				pm.foc.ic.nonrecon,   
+				pm.foc.ia.reconstructed,                  /* CH0: phase A current (A) */
+				pm.foc.ib.reconstructed,                  /* CH1: phase B current (A) */
+				pm.foc.ic.reconstructed,                  /* CH2: phase C current (A) */
 			
 //			pm.foc.i_alpha,              /* CH5: alpha-axis current (A) */
 //			pm.foc.i_beta,               /* CH6: beta-axis current (A) */
@@ -152,8 +159,8 @@ static uint16_t vofa_packet_build(void)
 				pm.foc.id_fdb,		
 			
 			/*目标相电流*/
-//				pm.foc.iq_ref,	
-//				pm.foc.id_ref,
+				pm.foc.iq_ref,	
+				pm.foc.id_ref,
 			
 //				pm.foc.i_a_ref,                  /* CH0: phase A current (A) */
 //        pm.foc.i_b_ref,                  /* CH1: phase B current (A) */
@@ -204,16 +211,16 @@ static uint16_t vofa_packet_build(void)
 //			voltage_sample.Ud_fdb,
 			
 			/*目标相电压*/
-			pm.foc.u_alpha,                 
-      pm.foc.u_beta,                  
+//			pm.foc.u_alpha,                 
+//      pm.foc.u_beta,                  
 
-				pm.foc.Uq_ref,
-				pm.foc.Ud_ref,
-						
-//			/*马鞍波*/
-        (float)pm.svpwm.ccr1,        /* CH9: PWM compare 1 */
-        (float)pm.svpwm.ccr2,        /* CH10: PWM compare 2 */
-        (float)pm.svpwm.ccr3,        /* CH11: PWM compare 3 */
+//				pm.foc.Uq_ref,
+//				pm.foc.Ud_ref,
+//						
+////			/*马鞍波*/
+//        (float)pm.svpwm.ccr1,        /* CH9: PWM compare 1 */
+//        (float)pm.svpwm.ccr2,        /* CH10: PWM compare 2 */
+//        (float)pm.svpwm.ccr3,        /* CH11: PWM compare 3 */
 
 			/*电机角度*/		
 //				pm.foc.mechanical_angle_rad,

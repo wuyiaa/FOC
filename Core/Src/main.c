@@ -31,6 +31,7 @@
 #include "common.h"
 #include "encoder_zero_calibration.h"
 #include "key_control.h"
+#include "sample_time.h"
 #include "vofa.h"
 #include "voltage_sample.h"
 
@@ -103,6 +104,7 @@ int main(void)
   MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
   DWT_Init();
+  sample_time_init();
 
   HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, GPIO_PIN_SET);
 //led3-b led2-y led1-g

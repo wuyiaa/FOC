@@ -193,7 +193,7 @@ typedef struct
     volatile uint32_t end_phase;
     volatile uint32_t elapsed_ticks;
     /* Valid for callback intervals shorter than one TIM1 PWM period. */
-    volatile float execution_time_us;
+    volatile float foc_time_us;
     volatile uint8_t done;
 } pmsm_foc_measure_t;
 

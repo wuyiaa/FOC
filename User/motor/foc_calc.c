@@ -1,6 +1,7 @@
 #include "common.h"
 #include "encoder_zero_calibration.h"
 #include "phase_auto_calibration.h"
+#include "trig_lut.h"
 
 #include <math.h>
 
@@ -154,6 +155,8 @@ void inverse_clarke_transform(pmsm_foc_t *foc)
 }
 
 float theta_e;
+//float sinf_e;
+//float cosf_e;
 void foc_electrical_angle_update(pmsm_t *pm)
 {
     uint32_t corrected_mechanical_count;
@@ -195,7 +198,11 @@ void foc_electrical_angle_update(pmsm_t *pm)
 
 //pm->foc.electrical_angle_rad = theta_e;
 				
-        pm->foc.sin_theta = sinf(pm->foc.electrical_angle_rad);
+//				  sinf_e = sinf(pm->foc.electrical_angle_rad);
+//        cosf_e = cosf(pm->foc.electrical_angle_rad);
+//        trig_functions_rad(pm->foc.electrical_angle_rad,
+//                           &pm->foc.sin_theta, &pm->foc.cos_theta);
+				 pm->foc.sin_theta = sinf(pm->foc.electrical_angle_rad);
         pm->foc.cos_theta = cosf(pm->foc.electrical_angle_rad);
     }
 
@@ -407,10 +414,6 @@ void foc_voltage_calc(pmsm_t *pm, float v_dc, float v_min)
 #elif (FOC_ENCODER_ZERO_CALIBRATION_MODE != 0U)
     foc_encoder_zero_calibration_step(pm, v_dc, v_min);
 #else
-//    if (pm->encoder_foc_sample.valid == 0U)
-//    {
-//        return;
-//    }
 
     inverse_park_transform(pm);
 		inverse_clarke_transform(&pm->foc);
