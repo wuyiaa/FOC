@@ -124,6 +124,9 @@ void pmsm_motor_init(void)
     pm.motor.lq = FOC_MOTOR_LQ_H;
     pm.motor.ld = FOC_MOTOR_LD_H;
     pm.motor.rs = FOC_MOTOR_RS_OHM;
+    pm.motor.phif = 0.014f;
+    pm.motor.inertia_kg_m2 = 0.008f;
+    pm.motor.speed_damping_ratio = 1.0f;
     pm.motor.pn = FOC_MOTOR_POLE_PAIRS;
 }
 
@@ -153,6 +156,7 @@ void pmsm_init(void)
     pmsm_board_init();
     pmsm_motor_init();
     foc_current_pid_init();
+    foc_speed_pid_init(&pm);
     as5047p_init(&pm.encoder);
     foc_get_curr_off();
 }

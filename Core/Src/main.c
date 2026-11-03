@@ -102,6 +102,7 @@ int main(void)
   MX_ADC2_Init();
   MX_TIM1_Init();
   MX_SPI1_Init();
+  MX_TIM7_Init();
   /* USER CODE BEGIN 2 */
   DWT_Init();
   sample_time_init();
@@ -135,6 +136,11 @@ int main(void)
 
   /* Keep TIM1 CH1-CH3 disabled while measuring the zero-current offsets. */
   pmsm_init();
+
+  /* Motor/encoder initialization is complete before speed updates begin. */
+  __HAL_TIM_SET_COUNTER(&htim7, 0U);
+  __HAL_TIM_CLEAR_FLAG(&htim7, TIM_FLAG_UPDATE);
+  HAL_TIM_Base_Start_IT(&htim7);
 
 #if (FOC_PWM_OUTPUT_DEFAULT_ENABLED != 0U)
   if (foc_pwm_output_enable(&pm) != HAL_OK)

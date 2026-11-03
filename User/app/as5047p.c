@@ -52,14 +52,14 @@ static void as5047p_transaction_end(as5047p_t *encoder)
 
 static void as5047p_publish(as5047p_t *encoder,
                             uint16_t raw_angle,
-                            uint32_t sample_cycle,
+                            //uint32_t sample_cycle,
                             as5047p_sample_t *sample)
 {
     uint32_t primask = __get_PRIMASK();
 
     __disable_irq();
     encoder->encoder_raw_latest = raw_angle;
-    encoder->encoder_sample_cycle = sample_cycle;
+    //encoder->encoder_sample_cycle = sample_cycle;
     encoder->mechanical_angle_rad_latest =
         (float)raw_angle * AS5047P_RAD_PER_COUNT;
     encoder->encoder_sample_sequence++;
@@ -69,7 +69,7 @@ static void as5047p_publish(as5047p_t *encoder,
     {
         sample->raw = raw_angle;
         sample->sequence = encoder->encoder_sample_sequence;
-        sample->cycle = sample_cycle;
+        //sample->cycle = sample_cycle;
         sample->valid = 1U;
     }
     __DMB();
@@ -90,14 +90,14 @@ void as5047p_init(as5047p_t *encoder)
     encoder->state = AS5047P_IDLE;
     encoder->pipeline_primed = 0U;
     encoder->encoder_valid = 0U;
-    encoder->encoder_sample_cycle = 0U;
-    encoder->transfer_start_cycle = 0U;
+    //encoder->encoder_sample_cycle = 0U;
+    //encoder->transfer_start_cycle = 0U;
     encoder->transfer_start_phase = 0U;
     encoder->transfer_timer_ticks = 0U;
     encoder->transfer_time_us = 0.0f;
     encoder->read_timer_ticks = 0U;
     encoder->read_time_us = 0.0f;
-    encoder->angle_request_cycle = 0U;
+    //encoder->angle_request_cycle = 0U;
     encoder->sequence_last = 0U;
     encoder->consecutive_error_count = 0U;
     encoder->rx_response_word = 0U;
@@ -151,8 +151,8 @@ HAL_StatusTypeDef as5047p_read_start_dma(as5047p_t *encoder)
     encoder->state = AS5047P_ACTIVE;
     as5047p_active_encoder = encoder;
 
-    /* DWT is only the angle timestamp; TIM1 measures transfer duration. */
-    encoder->transfer_start_cycle = DWT->CYCCNT;
+    /* Old DWT angle timestamp disabled; TIM1 still measures transfer duration. */
+    //encoder->transfer_start_cycle = DWT->CYCCNT;
     encoder->transfer_start_phase = sample_start_time();
     CSN_GPIO_Port->BSRR = (uint32_t)CSN_Pin << 16U;
     status = HAL_SPI_TransmitReceive_DMA(&hspi1,
@@ -173,7 +173,7 @@ HAL_StatusTypeDef as5047p_read_start_dma(as5047p_t *encoder)
         {
             encoder->dma_error_count++;
             encoder->pipeline_primed = 0U;
-            encoder->angle_request_cycle = 0U;
+            //encoder->angle_request_cycle = 0U;
             encoder->response_is_errfl_pending = 0U;
         }
     }
@@ -250,7 +250,7 @@ HAL_StatusTypeDef as5047p_read_blocking(as5047p_t *encoder,
     CLEAR_BIT(hspi1.Instance->CR2, SPI_CR2_TXDMAEN | SPI_CR2_RXDMAEN |
                                   SPI_CR2_TXEIE | SPI_CR2_RXNEIE | SPI_CR2_ERRIE);
     __HAL_SPI_ENABLE(&hspi1);
-    encoder->transfer_start_cycle = DWT->CYCCNT;
+    //encoder->transfer_start_cycle = DWT->CYCCNT;
     start_phase = sample_start_time();
     CSN_GPIO_Port->BSRR = (uint32_t)CSN_Pin << 16U;
     status = as5047p_wait_spi(SPI_SR_TXE, SPI_SR_TXE);
@@ -302,7 +302,7 @@ HAL_StatusTypeDef as5047p_read_blocking(as5047p_t *encoder,
         encoder->errfl_read_in_progress = 0U;
         encoder->pipeline_primed = 0U;
         encoder->response_is_errfl_pending = 0U;
-        encoder->angle_request_cycle = 0U;
+        //encoder->angle_request_cycle = 0U;
     }
 
     hspi1.State = HAL_SPI_STATE_READY;
@@ -329,7 +329,7 @@ uint8_t as5047p_latest_get(const as5047p_t *encoder,
     __disable_irq();
     sample->raw = encoder->encoder_raw_latest;
     sample->sequence = encoder->encoder_sample_sequence;
-    sample->cycle = encoder->encoder_sample_cycle;
+    //sample->cycle = encoder->encoder_sample_cycle;
     sample->valid = encoder->encoder_valid;
     __DMB();
 
@@ -405,7 +405,7 @@ void HAL_SPI_TxRxCpltCallback(SPI_HandleTypeDef *hspi)
 static void as5047p_response_process(as5047p_t *encoder, uint16_t response,
                                      as5047p_sample_t *sample)
 {
-    uint32_t sample_cycle;
+    //uint32_t sample_cycle;
 #if (AS5047P_ERRFL_AUTO_READ_ENABLE != 0U)
     uint8_t response_is_errfl;
 #endif
@@ -426,7 +426,7 @@ static void as5047p_response_process(as5047p_t *encoder, uint16_t response,
     {
         encoder->pipeline_primed = 1U;
         encoder->response_is_errfl_pending = encoder->tx_is_errfl;
-        encoder->angle_request_cycle = encoder->transfer_start_cycle;
+        //encoder->angle_request_cycle = encoder->transfer_start_cycle;
         return;
     }
     encoder->parity_error_count += encoder->rx_parity_error;
@@ -450,7 +450,7 @@ static void as5047p_response_process(as5047p_t *encoder, uint16_t response,
         /* Means a detail response arrived, not that parity passed. */
         encoder->errfl_valid = 1U;
         encoder->errfl_read_in_progress = 0U;
-        encoder->angle_request_cycle = encoder->transfer_start_cycle;
+        //encoder->angle_request_cycle = encoder->transfer_start_cycle;
         return;
     }
 
@@ -464,12 +464,12 @@ static void as5047p_response_process(as5047p_t *encoder, uint16_t response,
 #endif
 
     /* This response belongs to the command sent in the preceding FOC period. */
-    sample_cycle = encoder->angle_request_cycle;
-    encoder->angle_request_cycle = encoder->transfer_start_cycle;
+    //sample_cycle = encoder->angle_request_cycle;
+    //encoder->angle_request_cycle = encoder->transfer_start_cycle;
 
     /* RX contains the angle requested in the preceding SPI transaction. */
     as5047p_publish(encoder, response & AS5047P_DATA_MASK,
-                    sample_cycle,
+                    //sample_cycle,
                     sample);
 }
 
@@ -490,6 +490,6 @@ void HAL_SPI_ErrorCallback(SPI_HandleTypeDef *hspi)
     }
     encoder->pipeline_primed = 0U;
     encoder->response_is_errfl_pending = 0U;
-    encoder->angle_request_cycle = 0U;
+    //encoder->angle_request_cycle = 0U;
     as5047p_transaction_end(encoder);
 }

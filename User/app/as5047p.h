@@ -24,7 +24,7 @@ typedef struct
     uint16_t raw;
     uint8_t valid;
     uint32_t sequence;
-    uint32_t cycle;
+    //uint32_t cycle;
 } as5047p_sample_t;
 
 typedef struct
@@ -32,16 +32,16 @@ typedef struct
     volatile uint16_t encoder_raw_latest;
     volatile uint8_t encoder_valid;
     volatile uint32_t encoder_sample_sequence;
-    volatile uint32_t encoder_sample_cycle;
+    //volatile uint32_t encoder_sample_cycle;
     volatile float mechanical_angle_rad_latest;
 
-    volatile uint32_t transfer_start_cycle; /* DWT angle timestamp for speed. */
+    //volatile uint32_t transfer_start_cycle; /* DWT angle timestamp for speed. */
     volatile uint32_t transfer_start_phase; /* TIM1 phase for DMA timing. */
     volatile uint32_t transfer_timer_ticks;
     volatile float transfer_time_us;
     volatile uint32_t read_timer_ticks; /* Whole blocking read, TIM1 ticks. */
     volatile float read_time_us;
-    volatile uint32_t angle_request_cycle;
+    //volatile uint32_t angle_request_cycle;
 
     volatile as5047p_state_t state;
     volatile uint8_t pipeline_primed;

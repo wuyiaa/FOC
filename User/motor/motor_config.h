@@ -11,11 +11,9 @@
 /* Live tuning variable (Hz), defined in pid.c. Edit this in Keil Watch. */
 extern volatile float FOC_CURRENT_LOOP_BANDWIDTH_DEFAULT_HZ;
 #define FOC_DC_BUS_VOLTAGE_V                   24.0f
-/* Live limit margin, defined in pid.c; accepted range: 0.0f to 1.0f.
-   The bus voltage remains fixed until measured voltages are validated. */
-extern volatile float FOC_CURRENT_OUTPUT_UTILIZATION;
-#define FOC_CURRENT_INTEGRAL_LIMIT_RATIO       0.5f
-#define FOC_CURRENT_KD_V_S_PER_A                0.0f
+/* Fixed voltage margin; the bus voltage is measured each current-loop cycle. */
+#define FOC_CURRENT_VOLTAGE_MARGIN             0.95f
+#define FOC_CURRENT_INTEGRAL_LIMIT_RATIO       1.0f
 #define FOC_CURRENT_DEADBAND_A                  0.0f
 
 /* Latched phase-current trip threshold. */

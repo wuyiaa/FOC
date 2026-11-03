@@ -1,6 +1,8 @@
 #include "common.h"
 #include "voltage_sample.h"
 #include "sample_time.h"
+#include "pid.h"
+#include "math.h"
 
 //static uint8_t foc_current_trip_reached(const pmsm_foc_t *foc)
 //{
@@ -13,7 +15,11 @@
 //                     (foc->ic.reconstructed >= current_limit) ||
 //                     (foc->ic.reconstructed <= -current_limit));
 //}
-
+#define ID_FILTER_CUTOFF_HZ 1.0f
+#define ID_FILTER_ALPHA \
+    ((TWO_PI * ID_FILTER_CUTOFF_HZ * PWM_PERIOD_S) / \
+     (1.0f + TWO_PI * ID_FILTER_CUTOFF_HZ * PWM_PERIOD_S))
+		 
 static void foc_callback_time_measure_begin(pmsm_t *pm)
 {
     ADC_TIME_MARK_GPIO_Port->BSRR = (uint32_t)ADC_TIME_MARK_Pin << 16U;
@@ -106,19 +112,23 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 
         foc_electrical_angle_update(&pm);
 
-//        motor_speed_update(&pm.speed, &pm.encoder_foc_sample,
-//                           pm.motor.pn, DWT->CYCCNT);
+        //motor_speed_update(&pm.speed, &pm.encoder_foc_sample,
+                           //pm.motor.pn, DWT->CYCCNT);
 
 				
         foc_current_calc(&pm);
+				pm.foc.id_fdb_filtered  += ID_FILTER_ALPHA * (pm.foc.id_fdb - pm.foc.id_fdb_filtered);
+//				pm.foc.iq_fdb_filtered  += ID_FILTER_ALPHA * (pm.foc.iq_fdb - pm.foc.iq_fdb_filtered);
+//				pm.foc.Is_filtered = sqrtf(pm.foc.id_fdb_filtered*pm.foc.id_fdb_filtered + pm.foc.iq_fdb_filtered*pm.foc.iq_fdb_filtered);
 #if ((FOC_ENCODER_ZERO_CALIBRATION_MODE == 0U) && \
      (FOC_PHASE_AUTO_CALIBRATION_MODE == 0U))
-				pm.foc.id_ref = 0.0f;
-				pm.foc.iq_ref = 0.5f;
-        foc_current_pid_update(&pm, PWM_PERIOD_S);
+				pm.foc.id_ref = 0.5f;
+				pm.foc.iq_ref = 0.0f;//foc_speed_pid.output		0.5f
+        foc_current_pid_update(&pm, PWM_PERIOD_S, 0U);
 #endif
-//				pm.foc.Ud_ref = 0.0f;
-//				pm.foc.Uq_ref = 13.66f;
+//pm.foc.Ud_ref_filtered += ID_FILTER_ALPHA * (pm.foc.Ud_ref - pm.foc.Ud_ref_filtered);
+//				 pm.foc.Ud_ref = 2.0f;
+//				 pm.foc.Uq_ref = 0.0f;//13.163f
         foc_voltage_calc(&pm, voltage_sample.vbus_v, pm.svpwm.vref2_min);//voltage_sample.vbus_v pm.svpwm.vref2_min
         foc_pwm_output_update(&pm);
         foc_callback_time_measure_end(&pm);

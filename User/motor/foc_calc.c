@@ -189,6 +189,16 @@ void foc_electrical_angle_update(pmsm_t *pm)
         pm->foc.electrical_angle_rad = (float)calibration.electrical_direction *
             (float)electrical_count * AS5047P_RAD_PER_COUNT;
 				
+				pm->foc.electrical_angle_rad_camp = pm->foc.electrical_angle_rad + 
+				1.5f * PWM_PERIOD_S * (float)calibration.electrical_direction / MOTOR_SPEED_DIRECTION*pm->speed.electrical_rad_s_filtered;
+        if (pm->foc.electrical_angle_rad_camp <= -TWO_PI)
+        {
+            pm->foc.electrical_angle_rad_camp += TWO_PI;
+        }
+        else if (pm->foc.electrical_angle_rad_camp > 0.0f)
+        {
+            pm->foc.electrical_angle_rad_camp -= TWO_PI;
+        }
 //theta_e += 100 * PWM_PERIOD_S;  // PWM_PERIOD_S = 0.00005f
 
 //if (theta_e >= TWO_PI)
@@ -202,8 +212,10 @@ void foc_electrical_angle_update(pmsm_t *pm)
 //        cosf_e = cosf(pm->foc.electrical_angle_rad);
 //        trig_functions_rad(pm->foc.electrical_angle_rad,
 //                           &pm->foc.sin_theta, &pm->foc.cos_theta);
-				 pm->foc.sin_theta = sinf(pm->foc.electrical_angle_rad);
+				pm->foc.sin_theta = sinf(pm->foc.electrical_angle_rad);
         pm->foc.cos_theta = cosf(pm->foc.electrical_angle_rad);
+				pm->foc.sin_theta_camp = sinf(pm->foc.electrical_angle_rad_camp);
+        pm->foc.cos_theta_camp = cosf(pm->foc.electrical_angle_rad_camp);
     }
 
 }
@@ -239,8 +251,8 @@ void inverse_park_transform(pmsm_t *pm)
     }
 //		pm->foc.sin_theta = 0.0f;
 //        pm->foc.cos_theta = 1.0f;
-    sin_theta = pm->foc.sin_theta;
-    cos_theta = pm->foc.cos_theta;
+    sin_theta = pm->foc.sin_theta_camp;
+    cos_theta = pm->foc.cos_theta_camp;
 
 //		pm->foc.Ud_ref = 2.0f;
 //		pm->foc.Uq_ref = 0.0f;

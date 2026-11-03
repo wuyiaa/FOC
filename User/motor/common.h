@@ -98,6 +98,9 @@ typedef struct
     float lq;
     float ld;
     float rs;
+    float phif; /* Permanent-magnet flux linkage, Wb. */
+    float inertia_kg_m2;      /* Rotor and load inertia referred to the motor. */
+    float speed_damping_ratio; /* Dimensionless speed-loop damping ratio. */
     uint8_t pn;
 } pmsm_motor_t;
 
@@ -126,17 +129,26 @@ typedef struct
     float id_ref;
     float iq_ref;
     float id_fdb;
+	  float id_fdb_filtered;
     float iq_fdb;
+	  float iq_fdb_filtered;
     float Ud_ref;
+	  float Ud_ref_filtered;
     float Uq_ref;
+    float Ud_ff;
+    float Uq_ff;
     float u_alpha;
     float u_beta;
     float electrical_angle_rad;
+		float electrical_angle_rad_camp;
     float sin_theta;
+		float sin_theta_camp;
     float cos_theta;
+		float cos_theta_camp;
     uint8_t angle_valid;
 	  float mechanical_angle_rad;
     volatile uint8_t current_limit_fault;
+		float Is_filtered;
 } pmsm_foc_t;
 
 typedef struct
@@ -265,7 +277,10 @@ void inverse_clarke_transform(pmsm_foc_t *foc);
 void park_transform(pmsm_t *pm);
 void foc_current_calc(pmsm_t *pm);
 void foc_current_pid_init(void);
-void foc_current_pid_update(pmsm_t *pm, float dt);
+void foc_speed_pid_init(pmsm_t *pm);
+void foc_speed_pid_update(pmsm_t *pm, float dt);
+/* 0: PI only; nonzero: PI + feedforward. Both use circular voltage limiting. */
+void foc_current_pid_update(pmsm_t *pm, float dt, uint8_t feedforward_enable);
 void inverse_park_transform(pmsm_t *pm);
 void svpwm_calc(pmsm_t *pm, float v_dc, float v_min);
 void foc_voltage_calc(pmsm_t *pm, float v_dc, float v_min);

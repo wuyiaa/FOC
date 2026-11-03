@@ -747,6 +747,16 @@
               <FilePath>../User/motor/motor_speed.h</FilePath>
             </File>
             <File>
+              <FileName>motor_POS.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../User/motor/motor_POS.c</FilePath>
+            </File>
+            <File>
+              <FileName>motor_POS.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../User/motor/motor_POS.h</FilePath>
+            </File>
+            <File>
               <FileName>motor_config.h</FileName>
               <FileType>5</FileType>
               <FilePath>../User/motor/motor_config.h</FilePath>

@@ -129,6 +129,8 @@ static uint16_t vofa_packet_build(void)
     const uint32_t low_side_levels = GPIOB->IDR;
     const float vofa_values[] =
     {
+			
+
 			/*编码器计数报错*/
 //				pm.encoder.parity_error_count,
 //				pm.encoder.sensor_error_count,
@@ -144,19 +146,27 @@ static uint16_t vofa_packet_build(void)
 //			 pm.foc.cos_theta,
 //			 sinf_e-pm.foc.sin_theta,
 //			 cosf_e-pm.foc.cos_theta,
+			
 			/*反馈相电流*/
-				pm.foc.ia.nonrecon,   
-				pm.foc.ib.nonrecon,   
-				pm.foc.ic.nonrecon,   
-				pm.foc.ia.reconstructed,                  /* CH0: phase A current (A) */
-				pm.foc.ib.reconstructed,                  /* CH1: phase B current (A) */
-				pm.foc.ic.reconstructed,                  /* CH2: phase C current (A) */
+//				pm.foc.ia.nonrecon,   
+//				pm.foc.ib.nonrecon,   
+//				pm.foc.ic.nonrecon,   
+//				pm.foc.ia.reconstructed,                  /* CH0: phase A current (A) */
+//				pm.foc.ib.reconstructed,                  /* CH1: phase B current (A) */
+//				pm.foc.ic.reconstructed,                  /* CH2: phase C current (A) */
 			
 //			pm.foc.i_alpha,              /* CH5: alpha-axis current (A) */
 //			pm.foc.i_beta,               /* CH6: beta-axis current (A) */
-			
+
+			/*反馈相电流滤波*/
+//				pm.foc.Ud_ref/pm.foc.Is_filtered,
+//				pm.foc.Ud_ref/pm.foc.id_fdb_filtered,
+				pm.foc.Ud_ref_filtered/pm.foc.id_ref,			
 				pm.foc.iq_fdb,
-				pm.foc.id_fdb,		
+				pm.foc.iq_fdb_filtered,			
+				pm.foc.id_fdb,	
+        pm.foc.id_fdb_filtered,			
+							
 			
 			/*目标相电流*/
 				pm.foc.iq_ref,	
@@ -225,9 +235,26 @@ static uint16_t vofa_packet_build(void)
 			/*电机角度*/		
 //				pm.foc.mechanical_angle_rad,
 //				pm.foc.electrical_angle_rad,
+//				pm.foc.electrical_angle_rad_camp,
+//				pm.foc.sin_theta,
+//				pm.foc.sin_theta_camp,
+//				pm.foc.cos_theta,
+//				pm.foc.cos_theta_camp,
+				
 			/*电机角速度*/
-			pm.speed.mechanical_rad_s,   /* CH4: mechanical speed (rad/s) */
-
+//			pm.speed.mechanical_rad_s,   /* CH4: mechanical speed (rad/s) */
+//			pm.speed.mechanical_rad_s_filtered,
+//			pm.speed.mechanical_rad_s_ref,
+//			pm.speed.electrical_rad_s,   /* CH4: mechanical speed (rad/s) */
+//			pm.speed.electrical_rad_s_filtered,
+			
+			/*电机速度环*/
+//			foc_speed_pid.output,
+//			foc_speed_pid.error,
+//			foc_speed_pid.p_output,
+//			foc_speed_pid.integral_output,
+			
+			
 //        (float)pm.adc_measure.adc1_jeos_at_callback, /* CH5: ADC1 JEOS in callback */
 //        (float)pm.adc_measure.adc2_jeos_at_callback, /* CH6: ADC2 JEOS in callback */
 //        (float)pm.adc_measure.adc2_jeos_not_set_count, /* CH7: ADC2 JEOS=0 count */
