@@ -1,4 +1,5 @@
 #include "common.h"
+#include "pid.h"
 #include "encoder_zero_calibration.h"
 
 #include <string.h>
@@ -10,8 +11,35 @@ static uint8_t foc_pwm_channels_started;
 /* ADC channel offsets stay in physical A/B/C order across phase changes. */
 static float physical_current_offset[3];
 
+void output_pwm_init(pmsm_t *pm)
+{
+    const uint32_t primask = __get_PRIMASK();
+
+    /* Call with MOS outputs off. Load active CCRs without resetting TIM1. */
+    __disable_irq();
+    __HAL_TIM_DISABLE_OCxPRELOAD(&htim1, TIM_CHANNEL_1);
+    __HAL_TIM_DISABLE_OCxPRELOAD(&htim1, TIM_CHANNEL_2);
+    __HAL_TIM_DISABLE_OCxPRELOAD(&htim1, TIM_CHANNEL_3);
+    pm->svpwm.ccr1 = PWM_HALF_PERIOD_TICKS;
+    pm->svpwm.ccr2 = PWM_HALF_PERIOD_TICKS;
+    pm->svpwm.ccr3 = PWM_HALF_PERIOD_TICKS;
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, pm->svpwm.ccr1);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, pm->svpwm.ccr2);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, pm->svpwm.ccr3);
+    __HAL_TIM_ENABLE_OCxPRELOAD(&htim1, TIM_CHANNEL_1);
+    __HAL_TIM_ENABLE_OCxPRELOAD(&htim1, TIM_CHANNEL_2);
+    __HAL_TIM_ENABLE_OCxPRELOAD(&htim1, TIM_CHANNEL_3);
+    if (primask == 0U)
+    {
+        __enable_irq();
+    }
+}
+
 HAL_StatusTypeDef foc_pwm_output_enable(pmsm_t *pm)
 {
+    uint32_t primask;
+    HAL_StatusTypeDef status;
+
     if ((pm == NULL) ||
         (pm->encoder.fault != 0U) ||
         (pm->foc.current_limit_fault != 0U))
@@ -27,45 +55,69 @@ HAL_StatusTypeDef foc_pwm_output_enable(pmsm_t *pm)
     }
 #endif
 
-    if (foc_pwm_channels_started != 0U)
+    /* Keep ADC/TIM callbacks out of this short startup transition. */
+    primask = __get_PRIMASK();
+    __disable_irq();
+    __HAL_TIM_MOE_DISABLE_UNCONDITIONALLY(&htim1);
+    motor_speed_reset(&pm->speed);
+    foc_angle_reset(pm);
+    output_pwm_init(pm);
+
+    /* First RX is the old response; second RX contains a fresh angle. */
+    status = as5047p_read_blocking(&pm->encoder, &pm->encoder_foc_sample);
+    if (status == HAL_OK)
     {
-        __HAL_TIM_MOE_ENABLE(&htim1);
-        return HAL_OK;
+        status = as5047p_read_blocking(&pm->encoder, &pm->encoder_foc_sample);
+    }
+    if (status == HAL_OK)
+    {
+        foc_electrical_angle_update(pm);
+        if (foc_pwm_channels_started != 0U)
+        {
+            __HAL_TIM_MOE_ENABLE(&htim1);
+        }
+        else if ((HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1) != HAL_OK) ||
+                 (HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2) != HAL_OK) ||
+                 (HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3) != HAL_OK) ||
+                 (HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1) != HAL_OK) ||
+                 (HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_2) != HAL_OK) ||
+                 (HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_3) != HAL_OK))
+        {
+            __HAL_TIM_MOE_DISABLE_UNCONDITIONALLY(&htim1);
+            status = HAL_ERROR;
+        }
+        else
+        {
+            foc_pwm_channels_started = 1U;
+        }
     }
 
-    /* Start from a balanced zero vector until the first valid FOC update. */
-    pm->svpwm.ccr1 = PWM_HALF_PERIOD_TICKS;
-    pm->svpwm.ccr2 = PWM_HALF_PERIOD_TICKS;
-    pm->svpwm.ccr3 = PWM_HALF_PERIOD_TICKS;
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, pm->svpwm.ccr1);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, pm->svpwm.ccr2);
-    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, pm->svpwm.ccr3);
-
-    /* Latch all three new compare values on the same timer update event. */
-    __HAL_TIM_ENABLE_OCxPRELOAD(&htim1, TIM_CHANNEL_1);
-    __HAL_TIM_ENABLE_OCxPRELOAD(&htim1, TIM_CHANNEL_2);
-    __HAL_TIM_ENABLE_OCxPRELOAD(&htim1, TIM_CHANNEL_3);
-
-    if ((HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1) != HAL_OK) ||
-        (HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2) != HAL_OK) ||
-        (HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3) != HAL_OK) ||
-        (HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1) != HAL_OK) ||
-        (HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_2) != HAL_OK) ||
-        (HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_3) != HAL_OK))
+    if (primask == 0U)
     {
-        /* Keep the gate driver outputs disabled if startup partially fails. */
-        __HAL_TIM_MOE_DISABLE_UNCONDITIONALLY(&htim1);
-        return HAL_ERROR;
+        __enable_irq();
     }
-
-    foc_pwm_channels_started = 1U;
-    return HAL_OK;
+    return status;
 }
 
 void foc_pwm_output_disable(void)
 {
-    /* Keep TIM1 running: CH4 still generates the ADC injected trigger. */
+    const uint32_t primask = __get_PRIMASK();
+
+    /* MOE also stops the CH4-derived ADC/encoder sampling on this board. */
+    __disable_irq();
     __HAL_TIM_MOE_DISABLE_UNCONDITIONALLY(&htim1);
+    pid_reset(&foc_id_pid);
+    pid_reset(&foc_iq_pid);
+    pid_reset(&foc_speed_pid);
+    pid_reset(&foc_position_pid);
+    foc_feedforward_reset(&pm);
+    motor_speed_reset(&pm.speed);
+    foc_angle_reset(&pm);
+    output_pwm_init(&pm);
+    if (primask == 0U)
+    {
+        __enable_irq();
+    }
 }
 
 uint8_t foc_pwm_output_is_enabled(void)
@@ -157,6 +209,7 @@ void pmsm_init(void)
     pmsm_motor_init();
     foc_current_pid_init();
     foc_speed_pid_init(&pm);
+    foc_position_pid_init(&pm);
     as5047p_init(&pm.encoder);
     foc_get_curr_off();
 }

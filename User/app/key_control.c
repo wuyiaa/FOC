@@ -4,6 +4,11 @@
 
 #define KEY1_DEBOUNCE_TIME_MS  20U
 
+void key_control_process(void)
+{
+  key1_process();
+}
+
 static void key1_process(void)
 {
   static GPIO_PinState raw_state;
@@ -47,7 +52,4 @@ static void key1_process(void)
   }
 }
 
-void key_control_process(void)
-{
-  key1_process();
-}
+

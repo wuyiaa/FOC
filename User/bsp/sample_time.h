@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#include "common.h"
+
 typedef struct
 {
     uint32_t timer_count;
@@ -25,5 +27,11 @@ uint32_t sample_time_point_get(sample_time_point_t *point);
 /* Diagnostics: also save elapsed ticks to the supplied variable. */
 float sample_elapsed_time_record_us(uint32_t start_count, uint32_t end_count,
                                     volatile uint32_t *elapsed_ticks);
+
+/* FOC callback timing and ADC trigger-to-callback diagnostics. */
+void foc_callback_time_measure_begin(pmsm_t *pm);
+void foc_callback_time_measure_end(pmsm_t *pm);
+void foc_adc_time_measure_update(pmsm_t *pm);
+void foc_adc_time_measure_arm(pmsm_t *pm);
 
 #endif /* USER_BSP_SAMPLE_TIME_H */

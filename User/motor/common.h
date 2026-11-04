@@ -7,6 +7,7 @@
 #include "dwt_time.h"
 #include "as5047p.h"
 #include "motor_speed.h"
+#include "motor_POS.h"
 #include "motor_config.h"
 
 /* Set to 1U to enable three-phase PWM automatically after initialization. */
@@ -254,6 +255,7 @@ typedef struct
     as5047p_t encoder;
     as5047p_sample_t encoder_foc_sample;
     motor_speed_t speed;
+    motor_pos_t pos;
     pmsm_adc_val_t adc;
     pmsm_foc_t foc;
     pmsm_svpwm_t svpwm;
@@ -269,21 +271,17 @@ void pmsm_motor_init(void);
 void pmsm_init(void);
 void foc_get_curr_off(void);
 void foc_adc_sample(pmsm_t *pm);
-void foc_adc_time_measure_arm(pmsm_t *pm);
 void foc_current_sample_process(pmsm_t *pm);
+void foc_angle_reset(pmsm_t *pm);
 void foc_electrical_angle_update(pmsm_t *pm);
 void clarke_transform(pmsm_foc_t *foc, uint8_t full_clarke);
 void inverse_clarke_transform(pmsm_foc_t *foc);
 void park_transform(pmsm_t *pm);
 void foc_current_calc(pmsm_t *pm);
-void foc_current_pid_init(void);
-void foc_speed_pid_init(pmsm_t *pm);
-void foc_speed_pid_update(pmsm_t *pm, float dt);
-/* 0: PI only; nonzero: PI + feedforward. Both use circular voltage limiting. */
-void foc_current_pid_update(pmsm_t *pm, float dt, uint8_t feedforward_enable);
 void inverse_park_transform(pmsm_t *pm);
 void svpwm_calc(pmsm_t *pm, float v_dc, float v_min);
 void foc_voltage_calc(pmsm_t *pm, float v_dc, float v_min);
+void output_pwm_init(pmsm_t *pm);
 HAL_StatusTypeDef foc_pwm_output_enable(pmsm_t *pm);
 void foc_pwm_output_disable(void);
 uint8_t foc_pwm_output_is_enabled(void);

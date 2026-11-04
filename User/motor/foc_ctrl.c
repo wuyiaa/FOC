@@ -1,84 +1,17 @@
-#include "common.h"
+#include "foc_ctrl.h"
+#include "encoder_zero_calibration.h"
 #include "voltage_sample.h"
 #include "sample_time.h"
 #include "pid.h"
 #include "math.h"
+#include "motor_POS.h"
+#include "motor_speed.h"
 
-//static uint8_t foc_current_trip_reached(const pmsm_foc_t *foc)
-//{
-//    const float current_limit = FOC_CURRENT_TRIP_LIMIT_A;
-
-//    return (uint8_t)((foc->ia.reconstructed >= current_limit) ||
-//                     (foc->ia.reconstructed <= -current_limit) ||
-//                     (foc->ib.reconstructed >= current_limit) ||
-//                     (foc->ib.reconstructed <= -current_limit) ||
-//                     (foc->ic.reconstructed >= current_limit) ||
-//                     (foc->ic.reconstructed <= -current_limit));
-//}
-#define ID_FILTER_CUTOFF_HZ 1.0f
-#define ID_FILTER_ALPHA \
-    ((TWO_PI * ID_FILTER_CUTOFF_HZ * PWM_PERIOD_S) / \
-     (1.0f + TWO_PI * ID_FILTER_CUTOFF_HZ * PWM_PERIOD_S))
+/**************************电流环参数**************************/		
 		 
-static void foc_callback_time_measure_begin(pmsm_t *pm)
-{
-    ADC_TIME_MARK_GPIO_Port->BSRR = (uint32_t)ADC_TIME_MARK_Pin << 16U;
-    pm->foc_measure.start_phase = sample_start_time();
-    pm->foc_measure.done = 0U;
-}
+/**************************速度环参数**************************/			 
 
-static void foc_callback_time_measure_end(pmsm_t *pm)
-{
-    uint32_t end_phase = sample_start_time();
-    uint32_t start_phase;
-    uint32_t period;
 
-    ADC_TIME_MARK_GPIO_Port->BSRR = ADC_TIME_MARK_Pin;
-    start_phase = pm->foc_measure.start_phase;
-    period = 2U * TIM1->ARR;
-    pm->foc_measure.end_phase = end_phase;
-    if (period == 0U)
-    {
-        pm->foc_measure.done = 0U;
-        return;
-    }
-
-    pm->foc_measure.foc_time_us = sample_elapsed_time_record_us(
-        start_phase, end_phase, &pm->foc_measure.elapsed_ticks);
-    pm->foc_measure.done = 1U;
-}
-
-static void foc_adc_time_measure_update(pmsm_t *pm)
-{
-    sample_time_point_t point;
-    uint32_t period;
-    uint32_t phase;
-    uint32_t trigger;
-
-    if (pm->adc_measure.active == 0U)
-    {
-        return;
-    }
-
-    /* Keep the raw CNT/direction diagnostics from this same time point. */
-    phase = sample_time_point_get(&point);
-
-    /* Center-aligned mode 2: CC4 compare event on the up-count.
-       This is a modulo-one-PWM-period latency, not pure ADC conversion time.
-       A delay of a full PWM period or more cannot be detected here. */
-    period = 2U * TIM1->ARR;
-    trigger = TIM1->CCR4;
-    if ((period == 0U) || (trigger > TIM1->ARR))
-    {
-        pm->adc_measure.done = 0U;
-        return;
-    }
-    pm->adc_measure.timer_count = point.timer_count;
-    pm->adc_measure.timer_counting_down = point.counting_down;
-    pm->adc_measure.sample_time_us = sample_elapsed_time_record_us(
-        trigger, phase, &pm->adc_measure.elapsed_ticks);
-    pm->adc_measure.done = 1U;
-}
 
 /*
 - PC3  下降沿：ADC 开始采样的触发时刻。							上降沿：向下计数越过 3900：PC3 从低变高，产生上升沿。
@@ -97,6 +30,14 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
         foc_adc_time_measure_update(&pm);
 
         if (pm.adc.offset_ready == 0U)
+        {
+            voltage_sample_bus_update();
+            foc_callback_time_measure_end(&pm);
+            return;
+        }
+
+        /* A conversion already pending at stop must not republish old state. */
+        if (foc_pwm_output_is_enabled() == 0U)
         {
             voltage_sample_bus_update();
             foc_callback_time_measure_end(&pm);
@@ -122,8 +63,8 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 //				pm.foc.Is_filtered = sqrtf(pm.foc.id_fdb_filtered*pm.foc.id_fdb_filtered + pm.foc.iq_fdb_filtered*pm.foc.iq_fdb_filtered);
 #if ((FOC_ENCODER_ZERO_CALIBRATION_MODE == 0U) && \
      (FOC_PHASE_AUTO_CALIBRATION_MODE == 0U))
-				pm.foc.id_ref = 0.5f;
-				pm.foc.iq_ref = 0.0f;//foc_speed_pid.output		0.5f
+				pm.foc.id_ref = 0.0f;
+        pm.foc.iq_ref = foc_speed_pid.output;
         foc_current_pid_update(&pm, PWM_PERIOD_S, 0U);
 #endif
 //pm.foc.Ud_ref_filtered += ID_FILTER_ALPHA * (pm.foc.Ud_ref - pm.foc.Ud_ref_filtered);
@@ -135,22 +76,26 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
     }
 }
 
-void foc_adc_time_measure_arm(pmsm_t *pm)
+/* TIM7: speed updates at 2 kHz; TIM3: position updates at 1 kHz. */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-    pm->adc_measure.sample_time_us = 0.0f;
-    pm->adc_measure.elapsed_ticks = 0U;
-    pm->adc_measure.timer_count = 0U;
-    pm->adc_measure.timer_counting_down = 0U;
-    pm->adc_measure.done = 0U;
-
-    pm->foc_measure.start_phase = 0U;
-    pm->foc_measure.end_phase = 0U;
-    pm->foc_measure.elapsed_ticks = 0U;
-    pm->foc_measure.foc_time_us = 0.0f;
-    pm->foc_measure.done = 0U;
-
-    /* Only disable the software timing IRQ; hardware ADC triggering remains. */
-    __HAL_TIM_DISABLE_IT(&htim1, TIM_IT_CC4);
-    __HAL_TIM_CLEAR_FLAG(&htim1, TIM_FLAG_CC4);
-    pm->adc_measure.active = 1U;
+    if (htim->Instance == TIM7)
+    {
+        motor_speed_update(&pm.speed, &pm.encoder_foc_sample, pm.motor.pn);
+#if ((FOC_ENCODER_ZERO_CALIBRATION_MODE == 0U) && \
+     (FOC_PHASE_AUTO_CALIBRATION_MODE == 0U))
+        /* Match the position-angle direction to the speed convention. */
+        pm.speed.mechanical_rad_s_ref = 50.0f;//foc_position_pid.output *
+//            MOTOR_SPEED_DIRECTION * (float)calibration.electrical_direction;
+        foc_speed_pid_update(&pm, MOTOR_SPEED_UPDATE_PERIOD_S);
+#endif
+    }
+    else if (htim->Instance == TIM3)
+    {
+        motor_pos_update();
+#if ((FOC_ENCODER_ZERO_CALIBRATION_MODE == 0U) && \
+     (FOC_PHASE_AUTO_CALIBRATION_MODE == 0U))
+        foc_position_pid_update(&pm, MOTOR_POS_UPDATE_PERIOD_S);
+#endif
+    }
 }

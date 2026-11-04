@@ -39,7 +39,7 @@ volatile float foc_iq_pid_parameters[PID_PARAMETER_COUNT] =
 volatile float foc_speed_pid_parameters[PID_PARAMETER_COUNT] =
 {// 0.015 0.18
     0.015f, /* Continuous-time Kp, calculated from motor parameters. */
-    0.0f, /* Continuous-time Ki; dt is applied by pid_axis_calculate. */
+    0.13f, /* Continuous-time Ki; dt is applied by pid_axis_calculate. */
     0.0f,
     5.0f, /* Maximum positive/negative iq reference, A. */
     0.5f, /* Integral limit, A. */
@@ -49,6 +49,17 @@ volatile float foc_speed_pid_parameters[PID_PARAMETER_COUNT] =
 pid_controller_t foc_id_pid;
 pid_controller_t foc_iq_pid;
 pid_controller_t foc_speed_pid;
+pid_controller_t foc_position_pid;
+
+volatile float foc_position_pid_parameters[PID_PARAMETER_COUNT] =
+{
+    5.0f,  /* Kp: (rad/s)/rad. */
+    0.0f,  /* Ki: dt is applied by pid_axis_calculate. */
+    0.0f,  /* Kd: unfiltered angle feedback; disabled initially. */
+    50.0f, /* Speed output limit, rad/s. */
+    50.0f, /* Integral limit, rad/s. */
+    0.0f   /* Angle-error deadband, rad. */
+};
 
 static float pid_clamp(float value, float limit)
 {
@@ -102,6 +113,23 @@ static void foc_current_pid_parameters_update(void)
     pid_load_parameters(&foc_iq_pid, foc_iq_pid_parameters);
 }
 
+void pid_reset(pid_controller_t *pid)
+{
+    pid->error = 0.0f;
+    pid->integral_output = 0.0f;
+    pid->p_output = 0.0f;
+    pid->previous_error = 0.0f;
+    pid->output = 0.0f;
+}
+
+void foc_feedforward_reset(pmsm_t *pm)
+{
+    pm->foc.Ud_ff = 0.0f;
+    pm->foc.Uq_ff = 0.0f;
+    pm->foc.Ud_ref = 0.0f;
+    pm->foc.Uq_ref = 0.0f;
+}
+
 void pid_init(pid_controller_t *pid, volatile float parameters[PID_PARAMETER_COUNT])
 {
     if ((pid == NULL) || (parameters == NULL))
@@ -110,9 +138,7 @@ void pid_init(pid_controller_t *pid, volatile float parameters[PID_PARAMETER_COU
     }
 
     pid_load_parameters(pid, parameters);
-    pid->integral_output = 0.0f;
-    pid->previous_error = 0.0f;
-    pid->output = 0.0f;
+    pid_reset(pid);
 }
 
 /* Return the raw single-axis output; the caller applies its output limit. */
@@ -227,8 +253,20 @@ void foc_current_pid_update(pmsm_t *pm, float dt, uint8_t feedforward_enable)
 {
     float omega_e;
 
-    if ((pm == NULL) || (dt <= 0.0f) ||
-        (pm->encoder.fault != 0U) ||
+    if ((pm == NULL) || (dt <= 0.0f))
+    {
+        return;
+    }
+
+    if (foc_pwm_output_is_enabled() == 0U)
+    {
+        pid_reset(&foc_id_pid);
+        pid_reset(&foc_iq_pid);
+        foc_feedforward_reset(pm);
+        return;
+    }
+
+    if ((pm->encoder.fault != 0U) ||
         (pm->foc.current_limit_fault != 0U))
     {
         return;
@@ -281,6 +319,12 @@ void foc_speed_pid_update(pmsm_t *pm, float dt)
     float output;
     float delta_integral;
 
+    if (foc_pwm_output_is_enabled() == 0U)
+    {
+        pid_reset(&foc_speed_pid);
+        return;
+    }
+
     foc_speed_pid_parameters_update(pm);
     output = pid_axis_calculate(&foc_speed_pid,
         pm->speed.mechanical_rad_s_ref,
@@ -297,4 +341,55 @@ void foc_speed_pid_update(pmsm_t *pm, float dt)
 
     /* Publish only the limited current target: ADC may preempt TIM7 here. */
     foc_speed_pid.output = pid_clamp(output, foc_speed_pid.output_limit);
+}
+
+static void foc_position_pid_parameters_update(void)
+{
+    pid_load_parameters(&foc_position_pid, foc_position_pid_parameters);
+}
+
+void foc_position_pid_init(pmsm_t *pm)
+{
+    pm->pos.mechanical_angle_rad_ref = 0.0f;
+    pid_init(&foc_position_pid, foc_position_pid_parameters);
+}
+
+void foc_position_pid_update(pmsm_t *pm, float dt)
+{
+    const float old_integral = foc_position_pid.integral_output;
+    float error = pm->pos.mechanical_angle_rad_ref -
+                  pm->pos.mechanical_angle_rad_fdb;
+    float output;
+    float delta_integral;
+
+    if (foc_pwm_output_is_enabled() == 0U)
+    {
+        pid_reset(&foc_position_pid);
+        return;
+    }
+
+    /* Single-turn shortest-path error in [-pi, pi). */
+    while (error >= 0.5f * TWO_PI)
+    {
+        error -= TWO_PI;
+    }
+    while (error < -0.5f * TWO_PI)
+    {
+        error += TWO_PI;
+    }
+
+    foc_position_pid_parameters_update();
+    output = pid_axis_calculate(&foc_position_pid, error, 0.0f, dt);
+    delta_integral = foc_position_pid.integral_output - old_integral;
+
+    /* Use the same conditional integration as the speed controller. */
+    if ((fabsf(output) > foc_position_pid.output_limit) &&
+        (output * delta_integral > 0.0f))
+    {
+        foc_position_pid.integral_output = old_integral;
+        output -= delta_integral;
+    }
+
+    /* Output follows the calibrated mechanical-angle direction. */
+    foc_position_pid.output = pid_clamp(output, foc_position_pid.output_limit);
 }

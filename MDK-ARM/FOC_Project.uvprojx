@@ -702,6 +702,11 @@
               <FilePath>../User/motor/foc_ctrl.c</FilePath>
             </File>
             <File>
+              <FileName>foc_ctrl.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../User/motor/foc_ctrl.h</FilePath>
+            </File>
+            <File>
               <FileName>foc_calc.c</FileName>
               <FileType>1</FileType>
               <FilePath>../User/motor/foc_calc.c</FilePath>

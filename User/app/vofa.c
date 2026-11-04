@@ -161,16 +161,16 @@ static uint16_t vofa_packet_build(void)
 			/*反馈相电流滤波*/
 //				pm.foc.Ud_ref/pm.foc.Is_filtered,
 //				pm.foc.Ud_ref/pm.foc.id_fdb_filtered,
-				pm.foc.Ud_ref_filtered/pm.foc.id_ref,			
-				pm.foc.iq_fdb,
-				pm.foc.iq_fdb_filtered,			
-				pm.foc.id_fdb,	
-        pm.foc.id_fdb_filtered,			
-							
-			
-			/*目标相电流*/
-				pm.foc.iq_ref,	
-				pm.foc.id_ref,
+//				pm.foc.Ud_ref_filtered/pm.foc.id_ref,			
+//				pm.foc.iq_fdb,
+//				pm.foc.iq_fdb_filtered,			
+//				pm.foc.id_fdb,	
+//        pm.foc.id_fdb_filtered,			
+//							
+//			
+//			/*目标相电流*/
+//				pm.foc.iq_ref,	
+//				pm.foc.id_ref,
 			
 //				pm.foc.i_a_ref,                  /* CH0: phase A current (A) */
 //        pm.foc.i_b_ref,                  /* CH1: phase B current (A) */
@@ -242,11 +242,11 @@ static uint16_t vofa_packet_build(void)
 //				pm.foc.cos_theta_camp,
 				
 			/*电机角速度*/
-//			pm.speed.mechanical_rad_s,   /* CH4: mechanical speed (rad/s) */
-//			pm.speed.mechanical_rad_s_filtered,
-//			pm.speed.mechanical_rad_s_ref,
-//			pm.speed.electrical_rad_s,   /* CH4: mechanical speed (rad/s) */
-//			pm.speed.electrical_rad_s_filtered,
+			pm.speed.mechanical_rad_s,   /* CH4: mechanical speed (rad/s) */
+			pm.speed.mechanical_rad_s_filtered,
+			pm.speed.mechanical_rad_s_ref,
+			pm.speed.electrical_rad_s,   /* CH4: mechanical speed (rad/s) */
+			pm.speed.electrical_rad_s_filtered,
 			
 			/*电机速度环*/
 //			foc_speed_pid.output,

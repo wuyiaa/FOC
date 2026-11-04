@@ -49,6 +49,18 @@ static uint16_t current_window_get(uint16_t pwm_cmp)
 //    return phase;
 //}
 
+//static uint8_t foc_current_trip_reached(const pmsm_foc_t *foc)
+//{
+//    const float current_limit = FOC_CURRENT_TRIP_LIMIT_A;
+
+//    return (uint8_t)((foc->ia.reconstructed >= current_limit) ||
+//                     (foc->ia.reconstructed <= -current_limit) ||
+//                     (foc->ib.reconstructed >= current_limit) ||
+//                     (foc->ib.reconstructed <= -current_limit) ||
+//                     (foc->ic.reconstructed >= current_limit) ||
+//                     (foc->ic.reconstructed <= -current_limit));
+//}
+
 #if (CURRENT_RECONSTRUCTION_MODE == CURRENT_RECONSTRUCTION_MIN_WINDOW)
 static pmsm_phase_t min_window_phase_get(const pmsm_current_sample_t *sample)
 {
@@ -157,6 +169,31 @@ void inverse_clarke_transform(pmsm_foc_t *foc)
 float theta_e;
 //float sinf_e;
 //float cosf_e;
+void foc_angle_reset(pmsm_t *pm)
+{
+    /* Keep calibration and diagnostic counters; discard the old SPI pipeline. */
+    pm->encoder.pipeline_primed = 0U;
+    pm->encoder.response_is_errfl_pending = 0U;
+    pm->encoder.tx_is_errfl = 0U;
+    pm->encoder.errfl_read_pending = 0U;
+    pm->encoder.errfl_read_in_progress = 0U;
+    pm->encoder.encoder_valid = 0U;
+    pm->encoder.encoder_raw_latest = 0U;
+    pm->encoder.mechanical_angle_rad_latest = 0.0f;
+    pm->encoder_foc_sample.raw = 0U;
+    pm->encoder_foc_sample.valid = 0U;
+    pm->encoder_foc_sample.sequence = pm->encoder.encoder_sample_sequence;
+
+    pm->foc.angle_valid = 0U;
+    pm->foc.mechanical_angle_rad = 0.0f;
+    pm->foc.electrical_angle_rad = 0.0f;
+    pm->foc.electrical_angle_rad_camp = 0.0f;
+    pm->foc.sin_theta = 0.0f;
+    pm->foc.cos_theta = 1.0f;
+    pm->foc.sin_theta_camp = 0.0f;
+    pm->foc.cos_theta_camp = 1.0f;
+}
+
 void foc_electrical_angle_update(pmsm_t *pm)
 {
     uint32_t corrected_mechanical_count;

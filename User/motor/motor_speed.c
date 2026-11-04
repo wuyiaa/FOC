@@ -1,4 +1,6 @@
 #include "motor_speed.h"
+#include "foc_ctrl.h"
+#include "motor_POS.h"
 
 #include <stddef.h>
 
@@ -6,16 +8,16 @@
 #include "motor_config.h"
 #include "common.h"
 
-/* Old DWT window disabled; TIM7 now schedules fixed 500 us updates. */
-//#define MOTOR_SPEED_WINDOW_CYCLES  (DWT_CPU_FREQ_HZ / 1000UL)
-//#define MOTOR_SPEED_STALE_CYCLES   (DWT_CPU_FREQ_HZ / 100UL)
-#define MOTOR_SPEED_UPDATE_PERIOD_S  0.0005f
-#define MOTOR_SPEED_FILTER_CUTOFF_HZ 100.0f
-#define MOTOR_SPEED_FILTER_ALPHA \
-    ((TWO_PI * MOTOR_SPEED_FILTER_CUTOFF_HZ * MOTOR_SPEED_UPDATE_PERIOD_S) / \
-     (1.0f + TWO_PI * MOTOR_SPEED_FILTER_CUTOFF_HZ * MOTOR_SPEED_UPDATE_PERIOD_S))
-#define MOTOR_SPEED_COUNTS_PER_REV (AS5047P_DATA_MASK + 1U)
-#define MOTOR_SPEED_HALF_REV       (MOTOR_SPEED_COUNTS_PER_REV / 2U)
+		 
+void motor_speed_reset(motor_speed_t *speed)
+{
+    speed->initialized = 0U;
+    speed->last_raw = 0U;
+    speed->mechanical_rad_s = 0.0f;
+    speed->electrical_rad_s = 0.0f;
+    speed->mechanical_rad_s_filtered = 0.0f;
+    speed->electrical_rad_s_filtered = 0.0f;
+}
 
 void motor_speed_update(motor_speed_t *speed,
                         const as5047p_sample_t *sample,
@@ -46,6 +48,13 @@ void motor_speed_update(motor_speed_t *speed,
     //{
     //    return;
     //}
+
+    /* No angle samples arrive while MOE is off; do not reuse their history. */
+    if (foc_pwm_output_is_enabled() == 0U)
+    {
+        motor_speed_reset(speed);
+        return;
+    }
 
     /* Only this aligned halfword is needed; ADC may publish a newer sample
        during the calculation without changing this local angle. */
@@ -99,16 +108,3 @@ void motor_speed_update(motor_speed_t *speed,
     //speed->last_sequence = sample->sequence;
 }
 
-/* TIM7 update interrupt: 160 MHz / 160 / 500 = 2 kHz. */
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{
-    if (htim->Instance == TIM7)
-    {
-        motor_speed_update(&pm.speed, &pm.encoder_foc_sample, pm.motor.pn);
-#if ((FOC_ENCODER_ZERO_CALIBRATION_MODE == 0U) && \
-     (FOC_PHASE_AUTO_CALIBRATION_MODE == 0U))
-				pm.speed.mechanical_rad_s_ref = 50.0f;
-        foc_speed_pid_update(&pm, MOTOR_SPEED_UPDATE_PERIOD_S);
-#endif
-    }
-}
