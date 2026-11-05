@@ -25,6 +25,11 @@
 #define FOC_PHASE_AUTO_CALIBRATION_MODE      0U
 #endif
 
+/* 1: identify J/B/Tf on each motor start, then pause and disable MOS outputs. */
+#ifndef FOC_MOTOR_IDENTIFICATION_ENABLE
+#define FOC_MOTOR_IDENTIFICATION_ENABLE      0U
+#endif
+
 #define ENCODER_ZERO_ALIGN_TIME_S            1U
 #define ENCODER_ZERO_ALIGN_VOLTAGE_V         2.0f
 #define ENCODER_ZERO_SAMPLE_TIME_MS          100U
@@ -100,8 +105,11 @@ typedef struct
     float ld;
     float rs;
     float phif; /* Permanent-magnet flux linkage, Wb. */
-    float inertia_kg_m2;      /* Rotor and load inertia referred to the motor. */
+    float J;      /* Rotor and load inertia referred to the motor. */
+		float B;
+		float static_friction_torque; /* Breakaway/static friction, N*m; not Tf. */
     float speed_damping_ratio; /* Dimensionless speed-loop damping ratio. */
+	  float Tf;
     uint8_t pn;
 } pmsm_motor_t;
 

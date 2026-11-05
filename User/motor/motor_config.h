@@ -1,12 +1,6 @@
 #ifndef USER_MOTOR_MOTOR_CONFIG_H
 #define USER_MOTOR_MOTOR_CONFIG_H
 
-/* Motor electrical parameters: inductance in H, resistance in Ohm. */
-#define FOC_MOTOR_LD_H                         0.001423f
-#define FOC_MOTOR_LQ_H                         0.002849f
-#define FOC_MOTOR_RS_OHM                       6.617f
-#define FOC_MOTOR_POLE_PAIRS                   11U
-
 /* Current-loop tuning and voltage limits. */
 /* Live tuning variable (Hz), defined in pid.c. Edit this in Keil Watch. */
 extern volatile float FOC_CURRENT_LOOP_BANDWIDTH_DEFAULT_HZ;

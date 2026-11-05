@@ -158,6 +158,12 @@ int main(void)
   /* Measure TIM1_CH4-to-ADC1 callback latency from the timer counter. */
   foc_adc_time_measure_arm(&pm);
 
+  /* Keep angle sampling active when booting with all motor outputs off. */
+  if (foc_pwm_output_is_enabled() == 0U)
+  {
+    foc_pwm_output_disable();
+  }
+
   /* Initialize the non-blocking VOFA+ USB CDC stream. */
   vofa_init();
 

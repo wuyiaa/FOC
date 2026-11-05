@@ -16,6 +16,11 @@
 volatile float FOC_CURRENT_LOOP_BANDWIDTH_DEFAULT_HZ = 1000.0f;
 static float applied_bandwidth_hz = -1.0f;
 
+pid_controller_t foc_id_pid;
+pid_controller_t foc_iq_pid;
+pid_controller_t foc_speed_pid;
+pid_controller_t foc_position_pid;
+
 volatile float foc_id_pid_parameters[PID_PARAMETER_COUNT] =
 {
     0.0f, /* Kp is calculated from the live bandwidth during PID initialization. */
@@ -42,22 +47,17 @@ volatile float foc_speed_pid_parameters[PID_PARAMETER_COUNT] =
     0.13f, /* Continuous-time Ki; dt is applied by pid_axis_calculate. */
     0.0f,
     5.0f, /* Maximum positive/negative iq reference, A. */
-    0.5f, /* Integral limit, A. */
+    0.5f, /* Integral limit, A. *///0.5f
     0.0f  /* Speed-error deadband, rad/s. */
 };
-
-pid_controller_t foc_id_pid;
-pid_controller_t foc_iq_pid;
-pid_controller_t foc_speed_pid;
-pid_controller_t foc_position_pid;
 
 volatile float foc_position_pid_parameters[PID_PARAMETER_COUNT] =
 {
     5.0f,  /* Kp: (rad/s)/rad. */
     0.0f,  /* Ki: dt is applied by pid_axis_calculate. */
     0.0f,  /* Kd: unfiltered angle feedback; disabled initially. */
-    50.0f, /* Speed output limit, rad/s. */
-    50.0f, /* Integral limit, rad/s. */
+    70.0f, /* Speed output limit, rad/s. */
+    35.0f, /* Integral limit, rad/s. */
     0.0f   /* Angle-error deadband, rad. */
 };
 
@@ -96,10 +96,10 @@ static void foc_current_pid_parameters_update(void)
     {
         const float omega = TWO_PI * bandwidth_hz;
 
-        foc_id_pid_parameters[0] = omega * FOC_MOTOR_LD_H;
-        foc_id_pid_parameters[1] = omega * FOC_MOTOR_RS_OHM;
-        foc_iq_pid_parameters[0] = omega * FOC_MOTOR_LQ_H;
-        foc_iq_pid_parameters[1] = omega * FOC_MOTOR_RS_OHM;
+        foc_id_pid_parameters[0] = omega * pm.motor.ld;
+        foc_id_pid_parameters[1] = omega * pm.motor.rs;
+        foc_iq_pid_parameters[0] = omega * pm.motor.lq;
+        foc_iq_pid_parameters[1] = omega * pm.motor.rs;
         applied_bandwidth_hz = bandwidth_hz;
     }
 
@@ -299,9 +299,9 @@ static void foc_speed_pid_parameters_update(const pmsm_t *pm)
     const float torque_constant = 1.5f * (float)pm->motor.pn * pm->motor.phif;
 
 //    foc_speed_pid_parameters[0] = 2.0f * pm->motor.speed_damping_ratio *
-//        omega * pm->motor.inertia_kg_m2 / torque_constant;
+//        omega * pm->motor.J / torque_constant;
 //    foc_speed_pid_parameters[1] = omega * omega *
-//        pm->motor.inertia_kg_m2 / torque_constant;
+//        pm->motor.J / torque_constant;
 //	foc_speed_pid_parameters[0] = spd_p;
 //	foc_speed_pid_parameters[1] = spd_i;
     pid_load_parameters(&foc_speed_pid, foc_speed_pid_parameters);
@@ -328,7 +328,7 @@ void foc_speed_pid_update(pmsm_t *pm, float dt)
     foc_speed_pid_parameters_update(pm);
     output = pid_axis_calculate(&foc_speed_pid,
         pm->speed.mechanical_rad_s_ref,
-        pm->speed.mechanical_rad_s_filtered, dt);
+        pm->speed.mechanical_rad_s_fdb, dt);
     delta_integral = foc_speed_pid.integral_output - old_integral;
 
     /* Reject integral growth that pushes an already saturated output outward. */
@@ -350,7 +350,6 @@ static void foc_position_pid_parameters_update(void)
 
 void foc_position_pid_init(pmsm_t *pm)
 {
-    pm->pos.mechanical_angle_rad_ref = 0.0f;
     pid_init(&foc_position_pid, foc_position_pid_parameters);
 }
 

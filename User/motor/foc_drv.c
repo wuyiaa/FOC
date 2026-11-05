@@ -38,7 +38,7 @@ void output_pwm_init(pmsm_t *pm)
 HAL_StatusTypeDef foc_pwm_output_enable(pmsm_t *pm)
 {
     uint32_t primask;
-    HAL_StatusTypeDef status;
+    HAL_StatusTypeDef status = HAL_OK;
 
     if ((pm == NULL) ||
         (pm->encoder.fault != 0U) ||
@@ -59,15 +59,18 @@ HAL_StatusTypeDef foc_pwm_output_enable(pmsm_t *pm)
     primask = __get_PRIMASK();
     __disable_irq();
     __HAL_TIM_MOE_DISABLE_UNCONDITIONALLY(&htim1);
-    motor_speed_reset(&pm->speed);
-    foc_angle_reset(pm);
+    __HAL_TIM_DISABLE_IT(&htim1, TIM_IT_CC4);
+    __HAL_TIM_CLEAR_FLAG(&htim1, TIM_FLAG_CC4);
     output_pwm_init(pm);
 
-    /* First RX is the old response; second RX contains a fresh angle. */
-    status = as5047p_read_blocking(&pm->encoder, &pm->encoder_foc_sample);
-    if (status == HAL_OK)
+    /* Normally sampling has continued while paused. Prime only on first use. */
+    if (pm->encoder.pipeline_primed == 0U)
     {
         status = as5047p_read_blocking(&pm->encoder, &pm->encoder_foc_sample);
+        if (status == HAL_OK)
+        {
+            status = as5047p_read_blocking(&pm->encoder, &pm->encoder_foc_sample);
+        }
     }
     if (status == HAL_OK)
     {
@@ -92,6 +95,12 @@ HAL_StatusTypeDef foc_pwm_output_enable(pmsm_t *pm)
         }
     }
 
+    if (status != HAL_OK)
+    {
+        __HAL_TIM_CLEAR_FLAG(&htim1, TIM_FLAG_CC4);
+        __HAL_TIM_ENABLE_IT(&htim1, TIM_IT_CC4);
+    }
+
     if (primask == 0U)
     {
         __enable_irq();
@@ -103,7 +112,7 @@ void foc_pwm_output_disable(void)
 {
     const uint32_t primask = __get_PRIMASK();
 
-    /* MOE also stops the CH4-derived ADC/encoder sampling on this board. */
+    /* MOE keeps all MOS outputs off; CC4 compare IRQ keeps the encoder live. */
     __disable_irq();
     __HAL_TIM_MOE_DISABLE_UNCONDITIONALLY(&htim1);
     pid_reset(&foc_id_pid);
@@ -111,9 +120,9 @@ void foc_pwm_output_disable(void)
     pid_reset(&foc_speed_pid);
     pid_reset(&foc_position_pid);
     foc_feedforward_reset(&pm);
-    motor_speed_reset(&pm.speed);
-    foc_angle_reset(&pm);
     output_pwm_init(&pm);
+    __HAL_TIM_CLEAR_FLAG(&htim1, TIM_FLAG_CC4);
+    __HAL_TIM_ENABLE_IT(&htim1, TIM_IT_CC4);
     if (primask == 0U)
     {
         __enable_irq();
@@ -173,13 +182,16 @@ void pmsm_board_init(void)
 void pmsm_motor_init(void)
 {
     /* Motor parameters use SI units: H, Ohm and pole pairs. */
-    pm.motor.lq = FOC_MOTOR_LQ_H;
-    pm.motor.ld = FOC_MOTOR_LD_H;
-    pm.motor.rs = FOC_MOTOR_RS_OHM;
+    pm.motor.lq = 0.002849f;
+    pm.motor.ld = 0.001423f;
+    pm.motor.rs = 6.617f;
     pm.motor.phif = 0.014f;
-    pm.motor.inertia_kg_m2 = 0.008f;
+    pm.motor.J = 0.0014562f;//0.008 0.0396f
+		pm.motor.B = 0.0009688f; //0.00026334f
+		pm.motor.static_friction_torque = 0.009702f;
     pm.motor.speed_damping_ratio = 1.0f;
-    pm.motor.pn = FOC_MOTOR_POLE_PAIRS;
+	  pm.motor.Tf = 0.0110572f;
+    pm.motor.pn = 11U;
 }
 
 void pmsm_init(void)
