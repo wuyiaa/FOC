@@ -6,7 +6,7 @@
 #include "as5047p.h"
 
 #define MOTOR_SPEED_UPDATE_PERIOD_S  0.0005f
-#define MOTOR_SPEED_LPF_CUTOFF_HZ 25.0f
+#define MOTOR_SPEED_LPF_CUTOFF_HZ 100.0f
 
 /* Parallel Luenberger observer: fc_L, thegma_L and B/J. */
 #define MOTOR_SPEED_LUENBERGER_2ND_CUTOFF_HZ     100.0f

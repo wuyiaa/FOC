@@ -191,13 +191,13 @@ static uint16_t vofa_packet_build(void)
 //				pm.foc.cos_theta_camp,
 
 			/*电机角速度*/
-			pm.speed.mechanical_rad_s,   /* CH4: mechanical speed (rad/s) */
+//			pm.speed.mechanical_rad_s,   /* CH4: mechanical speed (rad/s) */
 			pm.speed.mechanical_rad_s_filtered,
-			pm.speed.observer_2nd.mechanical_rad_s_hat,
-			pm.speed.observer_3th.mechanical_rad_s_hat,
+//			pm.speed.observer_2nd.mechanical_rad_s_hat,
+//			pm.speed.observer_3th.mechanical_rad_s_hat,
 			pm.speed.observer_torque_3th.mechanical_rad_s_hat,
-			pm.speed.observer_torque_3th.load_torque_nm_hat,
-			pm.speed.mechanical_rad_s_ref,
+//			pm.speed.observer_torque_3th.load_torque_nm_hat,
+//			pm.speed.mechanical_rad_s_ref,
 
 //				pm.speed.observer_3th.mechanical_angle_rad_hat,
 			

@@ -13,7 +13,7 @@
  * Keil Watch can edit the bandwidth and both parameter arrays at runtime.
  * Bandwidth changes recalculate Kp/Ki once; voltage/integral limits update each cycle.
  */
-volatile float FOC_CURRENT_LOOP_BANDWIDTH_DEFAULT_HZ = 1000.0f;
+volatile float FOC_CURRENT_LOOP_BANDWIDTH_DEFAULT_HZ = 250.0f;
 static float applied_bandwidth_hz = -1.0f;
 
 pid_controller_t foc_id_pid;

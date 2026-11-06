@@ -120,7 +120,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 				
 				//如果反馈使用低通和二阶就要注意方向了
         pm.speed.mechanical_rad_s_ref = foc_position_pid.output;	
-				// foc_position_pid.output * MOTOR_SPEED_DIRECTION * (float)calibration.electrical_direction;
+				 foc_position_pid.output * MOTOR_SPEED_DIRECTION * (float)calibration.electrical_direction;
 				
 			  pm.speed.mechanical_rad_s_fdb = pm.speed.observer_torque_3th.mechanical_rad_s_hat; 
 //				pm.speed.mechanical_rad_s_filtered  pm.speed.observer_2nd.mechanical_rad_s_hat
