@@ -5,7 +5,9 @@
 
 typedef struct
 {
-    volatile float mechanical_angle_rad_ref;
+    volatile float mechanical_angle_deg_ref; /* Position target input [deg]. */
+    float mechanical_angle_deg_fdb;
+    float mechanical_angle_rad_ref; /* Derived target for the position PID. */
     float mechanical_angle_rad_fdb;
 } motor_pos_t;
 

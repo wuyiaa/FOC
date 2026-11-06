@@ -1,6 +1,7 @@
 #include "key_control.h"
 
 #include "common.h"
+#include "B_J_Tf_Identification.h"
 
 #define KEY1_DEBOUNCE_TIME_MS  20U
 
@@ -45,8 +46,24 @@ static void key1_process(void)
       }
       else
       {
+        const uint32_t primask = __get_PRIMASK();
+
+        /* Publish PWM enable and the new identification request together. */
+        __disable_irq();
         /* A latched encoder/current fault keeps the PWM disabled. */
-        (void)foc_pwm_output_enable(&pm);
+        if (foc_pwm_output_enable(&pm) == HAL_OK)
+        {
+#if (FOC_MOTOR_IDENTIFICATION_ENABLE != 0U)
+          /* Start a fresh run even when parameters were restored from Flash.
+             The first TIM7 step clears the previous observations/save latch. */
+          motor_identification.stage = MOTOR_IDENT_IDLE;
+          motor_identification_requested = 1U;
+#endif
+        }
+        if (primask == 0U)
+        {
+          __enable_irq();
+        }
       }
     }
   }

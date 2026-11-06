@@ -3,6 +3,7 @@
 
 #include "common.h"
 #include "encoder_zero_calibration.h"
+#include "B_J_Tf_Identification.h"
 #include "usb_device.h"
 #include "usbd_cdc_if.h"
 #include "pid.h"
@@ -129,23 +130,40 @@ static uint16_t vofa_packet_build(void)
     const uint32_t low_side_levels = GPIOB->IDR;
     const float vofa_values[] =
     {
+			
 //			/*J_B_Tf*/
 //			motor_identification.J,
 //			motor_identification.B,
 //			motor_identification.Tf,
 //			motor_identification.stage,
-//			pm.speed.mechanical_rad_s_hat,
-			
-//				/*电机电流环*/
+//			pm.speed.observer_2nd.mechanical_rad_s_hat,
+//			pm.speed.mechanical_rad_s_ref,
+//			pm.speed.mechanical_rad_s_fdb,
+//			motor_identification.acceleration.acceleration_mean_rad_s2,
+//			
 //				pm.foc.iq_fdb,
 //				pm.foc.id_fdb,	
+//			
+//			motor_identification.acceleration.iq_mean_a,
+//			motor_identification.acceleration.acceleration_mean_rad_s2,
+//			motor_identification.acceleration.speed_mean_rad_s,
+
+//			motor_identification.deceleration.iq_mean_a,
+//			motor_identification.deceleration.acceleration_mean_rad_s2,
+//			motor_identification.deceleration.speed_mean_rad_s,
+
+//				/*电机电流环*/
+//				pm.foc.iq_fdb,
+//				pm.foc.id_fdb,		
 //				pm.foc.iq_ref,	
 //				pm.foc.id_ref,
 //				pm.foc.Uq_ref,
 //				pm.foc.Ud_ref,
+//				pm.speed.observer_torque_3th.load_torque_nm_hat/pm.motor.Kt,
+
 //				
 //			/*电机速度环*/
-//			pm.speed.mechanical_rad_s_filtered,
+//			pm.speed.mechanical_rad_s_fdb,
 //			pm.speed.mechanical_rad_s_ref,
 //			foc_speed_pid.output,
 //			foc_speed_pid.error,
@@ -153,9 +171,11 @@ static uint16_t vofa_packet_build(void)
 //			foc_speed_pid.integral_output,
 //			
 //			/*电机位置环*/
-//			pm.pos.mechanical_angle_rad_fdb,
-//			pm.pos.mechanical_angle_rad_ref,
-//			foc_position_pid.error,
+//			pm.pos.mechanical_angle_deg_fdb,
+//			pm.pos.mechanical_angle_deg_ref,
+//			pm.pos.mechanical_angle_deg_ref,
+//			pm.pos.mechanical_angle_deg_fdb,
+//			foc_position_pid.error*57.32f,
 //			foc_position_pid.p_output,
 //			foc_position_pid.integral_output,
 //			foc_position_pid.output,
@@ -169,17 +189,17 @@ static uint16_t vofa_packet_build(void)
 //				pm.foc.sin_theta_camp,
 //				pm.foc.cos_theta,
 //				pm.foc.cos_theta_camp,
-				pm.speed.mechanical_rad_s_hat,
-//				pm.speed.electrical_rad_s_hat,
-			/*电机角速度*/
 
+			/*电机角速度*/
 			pm.speed.mechanical_rad_s,   /* CH4: mechanical speed (rad/s) */
 			pm.speed.mechanical_rad_s_filtered,
-//			 pm.speed.observer_three.mechanical_angle_rad_hat,
-    pm.speed.observer_three.mechanical_rad_s_hat,
-//			pm.speed.mechanical_rad_s_ref,
-//			pm.speed.electrical_rad_s,   /* CH4: mechanical speed (rad/s) */
-//			pm.speed.electrical_rad_s_filtered,
+			pm.speed.observer_2nd.mechanical_rad_s_hat,
+			pm.speed.observer_3th.mechanical_rad_s_hat,
+			pm.speed.observer_torque_3th.mechanical_rad_s_hat,
+			pm.speed.observer_torque_3th.load_torque_nm_hat,
+			pm.speed.mechanical_rad_s_ref,
+
+//				pm.speed.observer_3th.mechanical_angle_rad_hat,
 			
 			/*编码器计数报错*/
 //				pm.encoder.parity_error_count,
@@ -187,7 +207,7 @@ static uint16_t vofa_packet_build(void)
 //				pm.encoder.busy_skip_count ,
 //				pm.encoder.encoder_sample_sequence,
 //				pm.foc.mechanical_angle_rad,
-//		  	pm.foc.electrical_angle_rad,
+//		  	pm.                                                                                                                    foc.electrical_angle_rad,
 //			 (float)pm.encoder_foc_sample.raw,
 //			calibration.current_direction,
 //			 sinf_e,

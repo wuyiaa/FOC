@@ -1,15 +1,10 @@
 #include "encoder_zero_calibration.h"
+#include "flash_save.h"
 
 #include <stddef.h>
 #include <math.h>
 
-#include "stm32g4xx_hal_flash.h"
-#include "stm32g4xx_hal_flash_ex.h"
 
-#define ENCODER_ZERO_FLASH_ADDRESS       0x0807F800UL
-#define ENCODER_ZERO_FLASH_PAGE          127U
-#define ENCODER_ZERO_FLASH_BANK          FLASH_BANK_2
-#define ENCODER_ZERO_FLASH_RECORD_COUNT  (FLASH_PAGE_SIZE / 8U)
 /* V3 uses bit 16 for current polarity; retain both older formats. */
 #define ENCODER_ZERO_RECORD_MAGIC        0xA54A0000UL
 #define ENCODER_ZERO_RECORD_V2_MAGIC     0xA5480000UL
@@ -17,7 +12,6 @@
 #define ENCODER_ZERO_RECORD_CURRENT_BIT  0x00010000UL
 #define ENCODER_ZERO_RECORD_OLD_MAGIC    0xA5470000UL
 #define ENCODER_ZERO_RECORD_MAGIC_MASK   0xFFFF0000UL
-#define ENCODER_ZERO_RECORD_ERASED       0xFFFFFFFFFFFFFFFFULL
 #define ENCODER_ZERO_RECORD_PHASE_BIT    0x00004000UL
 #define ENCODER_ZERO_RECORD_ANGLE_BIT    0x00008000UL
 
@@ -83,7 +77,7 @@ static uint8_t encoder_zero_record_parse(uint64_t record,
 HAL_StatusTypeDef encoder_zero_flash_load(volatile pmsm_encoder_zero_cal_t *config)
 {
     const volatile uint64_t *record_address =
-        (const volatile uint64_t *)ENCODER_ZERO_FLASH_ADDRESS;
+        (const volatile uint64_t *)FLASH_SAVE_ADDRESS;
     uint16_t latest_raw = 0U;
     uint16_t decoded_raw;
     uint8_t latest_phase = MOTOR_PHASE_REVERSED_DEFAULT;
@@ -100,11 +94,11 @@ HAL_StatusTypeDef encoder_zero_flash_load(volatile pmsm_encoder_zero_cal_t *conf
         return HAL_ERROR;
     }
 
-    for (index = 0U; index < ENCODER_ZERO_FLASH_RECORD_COUNT; index++)
+    for (index = 0U; index < FLASH_SAVE_RECORD_COUNT; index++)
     {
         uint64_t record = record_address[index];
 
-        if ((record != ENCODER_ZERO_RECORD_ERASED) &&
+        if ((record != FLASH_SAVE_ERASED) &&
             (encoder_zero_record_parse(record, &decoded_raw,
                                        &decoded_phase,
                                        &decoded_direction, &decoded_current_direction) != 0U))
@@ -131,135 +125,50 @@ HAL_StatusTypeDef encoder_zero_flash_load(volatile pmsm_encoder_zero_cal_t *conf
 
 HAL_StatusTypeDef encoder_zero_flash_save(const volatile pmsm_encoder_zero_cal_t *config)
 {
-    const volatile uint64_t *record_address =
-        (const volatile uint64_t *)ENCODER_ZERO_FLASH_ADDRESS;
-    FLASH_EraseInitTypeDef erase = {0};
+    const volatile uint64_t *records =
+        (const volatile uint64_t *)FLASH_SAVE_ADDRESS;
     uint64_t record;
-    uint16_t latest_raw = 0U;
-    uint16_t decoded_raw;
-    uint8_t latest_phase = 0U;
-    uint8_t decoded_phase;
-    int8_t latest_direction = 0;
-    int8_t decoded_direction;
-    int8_t latest_current_direction = 1;
-    int8_t decoded_current_direction;
-    uint32_t index;
-    uint32_t first_erased_index = ENCODER_ZERO_FLASH_RECORD_COUNT;
-    uint32_t page_error = 0xFFFFFFFFUL;
-    uint8_t found = 0U;
-    uint8_t latest_new_format = 0U;
-    HAL_StatusTypeDef status;
-
+    uint64_t latest = FLASH_SAVE_ERASED;
+    uint32_t i;
+    uint16_t raw;
+    uint8_t phase;
+    int8_t direction;
+    int8_t current;
     if ((config == NULL) ||
         (config->mechanical_zero_raw > AS5047P_DATA_MASK) ||
         (config->phase_reversed > 1U) ||
-        ((config->electrical_direction != -1) &&
-         (config->electrical_direction != 1)) ||
-        ((config->current_direction != -1) &&
-         (config->current_direction != 1)))
+        ((config->electrical_direction != -1) && (config->electrical_direction != 1)) ||
+        ((config->current_direction != -1) && (config->current_direction != 1)))
     {
         return HAL_ERROR;
     }
-
-#if defined(FLASH_OPTR_DBANK)
-    /* This reserved page is Bank 2 page 127 in the configured dual-bank map. */
-    if ((FLASH->OPTR & FLASH_OPTR_DBANK) == 0U)
+    record = encoder_zero_record_make(config->mechanical_zero_raw,
+                                      config->phase_reversed,
+                                      config->electrical_direction,
+                                      config->current_direction);
+    for (i = 0U; i < FLASH_SAVE_RECORD_COUNT; i++)
     {
-        return HAL_ERROR;
-    }
-    if ((SYSCFG->MEMRMP & SYSCFG_MEMRMP_FB_MODE) != 0U)
-    {
-        return HAL_ERROR;
-    }
-#else
-    return HAL_ERROR;
-#endif
-
-    for (index = 0U; index < ENCODER_ZERO_FLASH_RECORD_COUNT; index++)
-    {
-        uint64_t existing_record = record_address[index];
-
-        if ((existing_record == ENCODER_ZERO_RECORD_ERASED) &&
-            (first_erased_index == ENCODER_ZERO_FLASH_RECORD_COUNT))
+        if (encoder_zero_record_parse(records[i], &raw, &phase,
+                                      &direction, &current) != 0U)
         {
-            first_erased_index = index;
-        }
-        else if ((existing_record != ENCODER_ZERO_RECORD_ERASED) &&
-                 (encoder_zero_record_parse(existing_record,
-                                            &decoded_raw, &decoded_phase,
-                                            &decoded_direction, &decoded_current_direction) != 0U))
-        {
-            latest_raw = decoded_raw;
-            latest_phase = decoded_phase;
-            latest_direction = decoded_direction;
-            latest_current_direction = decoded_current_direction;
-            latest_new_format =
-                ((((uint32_t)existing_record &
-                   ENCODER_ZERO_RECORD_V3_MASK) ==
-                  ENCODER_ZERO_RECORD_MAGIC) ? 1U : 0U);
-            found = 1U;
+            latest = records[i];
         }
     }
-
-    /* Avoid consuming Flash endurance when recalibration produced no change. */
-    if ((found != 0U) && (latest_new_format != 0U) &&
-        (latest_raw == config->mechanical_zero_raw) &&
-        (latest_phase == config->phase_reversed) &&
-        (latest_direction == config->electrical_direction) &&
-        (latest_current_direction == config->current_direction))
+    if (latest == record)
     {
         return HAL_OK;
     }
+    return flash_save_append(&record, 1U);
+}
 
-    status = HAL_FLASH_Unlock();
-    if (status != HAL_OK)
-    {
-        return status;
-    }
-    status = HAL_OK;
-
-    if (first_erased_index >= ENCODER_ZERO_FLASH_RECORD_COUNT)
-    {
-        erase.TypeErase = FLASH_TYPEERASE_PAGES;
-        erase.Banks = ENCODER_ZERO_FLASH_BANK;
-        erase.Page = ENCODER_ZERO_FLASH_PAGE;
-        erase.NbPages = 1U;
-        status = HAL_FLASHEx_Erase(&erase, &page_error);
-        first_erased_index = 0U;
-        if ((status == HAL_OK) && (page_error != 0xFFFFFFFFUL))
-        {
-            status = HAL_ERROR;
-        }
-    }
-
-    if (status == HAL_OK)
-    {
-        record = encoder_zero_record_make(config->mechanical_zero_raw,
-                                          config->phase_reversed,
-                                          config->electrical_direction,
-                                          config->current_direction);
-        status = HAL_FLASH_Program(
-            FLASH_TYPEPROGRAM_DOUBLEWORD,
-            ENCODER_ZERO_FLASH_ADDRESS + (first_erased_index * 8U),
-            record);
-    }
-
-    if ((status == HAL_OK) &&
-        (record_address[first_erased_index] !=
-         encoder_zero_record_make(config->mechanical_zero_raw,
-                                  config->phase_reversed,
-                                  config->electrical_direction,
-                                  config->current_direction)))
-    {
-        status = HAL_ERROR;
-    }
-
-    if (HAL_FLASH_Lock() != HAL_OK)
-    {
-        status = HAL_ERROR;
-    }
-
-    return status;
+/* Shared Flash storage calls this to retain valid encoder records. */
+uint8_t encoder_zero_flash_record_valid(uint64_t record)
+{
+    uint16_t raw;
+    uint8_t phase;
+    int8_t direction;
+    int8_t current;
+    return encoder_zero_record_parse(record, &raw, &phase, &direction, &current);
 }
 
 #if ((FOC_ENCODER_ZERO_CALIBRATION_MODE != 0U) || \

@@ -1,5 +1,6 @@
 #include "foc_ctrl.h"
 #include "encoder_zero_calibration.h"
+#include "B_J_Tf_Identification.h"
 #include "voltage_sample.h"
 #include "sample_time.h"
 #include "pid.h"
@@ -43,7 +44,6 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
             foc_callback_time_measure_end(&pm);
             return;
         }
-      				       
 
 				voltage_sample_bus_update();
         foc_adc_sample(&pm);
@@ -52,14 +52,6 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
         
 				(void)as5047p_read_blocking(&pm.encoder, &pm.encoder_foc_sample);
 				foc_electrical_angle_update(&pm);
-
-
-        /* Complete one SPI frame and update this FOC cycle's angle sample. */
-
-  
-        //motor_speed_update(&pm.speed, &pm.encoder_foc_sample,
-                           //pm.motor.pn, DWT->CYCCNT);
-
 				
 				pm.foc.id_fdb_filtered  += ID_FILTER_ALPHA * (pm.foc.id_fdb - pm.foc.id_fdb_filtered);
 				pm.foc.iq_fdb_filtered  += ID_FILTER_ALPHA * (pm.foc.iq_fdb - pm.foc.iq_fdb_filtered);
@@ -67,7 +59,8 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
 #if ((FOC_ENCODER_ZERO_CALIBRATION_MODE == 0U) && \
      (FOC_PHASE_AUTO_CALIBRATION_MODE == 0U))
 				pm.foc.id_ref = 0.0f;
-        pm.foc.iq_ref = foc_speed_pid.output;//foc_speed_pid.output;  0.042
+        pm.foc.iq_ref = foc_speed_pid.output 
+											+	(pm.speed.observer_torque_3th.load_torque_nm_hat/pm.motor.Kt);//foc_speed_pid.output;  0.042
         foc_current_pid_update(&pm, PWM_PERIOD_S, 0U);
 #endif
 pm.foc.Ud_ref_filtered += ID_FILTER_ALPHA * (pm.foc.Ud_ref - pm.foc.Ud_ref_filtered);
@@ -98,41 +91,71 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
     if (htim->Instance == TIM7)
     {   
+				float wc_l = 500.0f;
 			
         motor_speed_update(&pm.speed, &pm.encoder_foc_sample, pm.motor.pn);
-			  speed_lungberger_two(&pm.speed, pm.foc.mechanical_angle_rad, pm.motor.pn);
-        speed_Luenberger_three(&pm.speed.observer_three,
+        speed_LPF_filtered(&pm.speed, pm.motor.pn);
+			  
+			  speed_lungberger_2nd(&pm.speed.observer_2nd, 
+						pm.foc.mechanical_angle_rad * (MOTOR_SPEED_DIRECTION * (float)calibration.electrical_direction), pm.motor.pn);
+
+  			speed_Luenberger_3th(&pm.speed.observer_3th,
                                pm.foc.mechanical_angle_rad,
                                MOTOR_SPEED_UPDATE_PERIOD_S,
-                               MOTOR_SPEED_LUENBERGER_THREE_POLE_HZ);
+                               MOTOR_SPEED_LUENBERGER_3TH_POLE_HZ);
 			
+        /* Parallel mechanical model; paused current feedback would be stale. */
+        speed_torque_Luenberger_3th(
+            &pm.speed.observer_torque_3th,
+            pm.foc.mechanical_angle_rad, pm.speed.mechanical_rad_s,
+            (foc_pwm_output_is_enabled() != 0U) ? pm.foc.iq_fdb : 0.0f,
+            MOTOR_SPEED_UPDATE_PERIOD_S,
+            wc_l,
+            pm.motor.J, pm.motor.B, pm.motor.Kt, pm.motor.pn);
+			
+			//MOTOR_SPEED_TORQUE_LUENBERGER_3TH_POLE_RAD_S
 #if ((FOC_ENCODER_ZERO_CALIBRATION_MODE == 0U) && \
      (FOC_PHASE_AUTO_CALIBRATION_MODE == 0U))
         /* Match the position-angle direction to the speed convention. */
-//        pm.speed.mechanical_rad_s_ref = 50.0f;// foc_position_pid.output * MOTOR_SPEED_DIRECTION * (float)calibration.electrical_direction;
-           pm.speed.mechanical_rad_s_fdb = pm.speed.mechanical_rad_s_filtered;//pm.speed.mechanical_rad_s_filtered  pm.speed.mechanical_rad_s_hat
-			
+				
+				//如果反馈使用低通和二阶就要注意方向了
+        pm.speed.mechanical_rad_s_ref = foc_position_pid.output;	
+				// foc_position_pid.output * MOTOR_SPEED_DIRECTION * (float)calibration.electrical_direction;
+				
+			  pm.speed.mechanical_rad_s_fdb = pm.speed.observer_torque_3th.mechanical_rad_s_hat; 
+//				pm.speed.mechanical_rad_s_filtered  pm.speed.observer_2nd.mechanical_rad_s_hat
+//				pm.speed.observer_torque_3th.mechanical_rad_s_hat
 			
 			
 #if (FOC_MOTOR_IDENTIFICATION_ENABLE != 0U)
-        J_B_Tf_Indent(&pm.speed, pm.foc.iq_fdb,
-                      1.5f * (float)pm.motor.pn * pm.motor.phif,
-                      foc_pwm_output_is_enabled());
-        if (((motor_identification.stage == MOTOR_IDENT_DONE) ||
-             (motor_identification.stage == MOTOR_IDENT_FAILED)) &&
-            (foc_pwm_output_is_enabled() != 0U))
+        if (motor_identification_requested != 0U)
         {
-            foc_pwm_output_disable();
+            J_B_Tf_Indent(&pm.speed, pm.foc.iq_fdb,
+                          pm.motor.Kt,
+                          foc_pwm_output_is_enabled());
+            if ((motor_identification.stage == MOTOR_IDENT_DONE) ||
+                (motor_identification.stage == MOTOR_IDENT_FAILED))
+            {
+                motor_identification_requested = 0U;
+                foc_pwm_output_disable();
+                if (motor_identification.stage == MOTOR_IDENT_DONE)
+                {
+                    /* Apply, program and verify once, after MOS outputs stop. */
+                    motor_identification_save_process();
+                }
+            }
         }
 #endif
+
         foc_speed_pid_update(&pm, MOTOR_SPEED_UPDATE_PERIOD_S);
+				
 #endif
     }
     else if (htim->Instance == TIM3)
     {
-//        motor_pos_update();
-			pm.pos.mechanical_angle_rad_fdb = pm.foc.mechanical_angle_rad;//pm.foc.mechanical_angle_rad; pm.speed.mechanical_rad_s_hat
-//			pm.pos.mechanical_angle_rad_ref = 0.0f;
+      motor_pos_update();
+			pm.pos.mechanical_angle_deg_ref = 30.2f;
+			
 #if ((FOC_ENCODER_ZERO_CALIBRATION_MODE == 0U) && \
      (FOC_PHASE_AUTO_CALIBRATION_MODE == 0U))
         foc_position_pid_update(&pm, MOTOR_POS_UPDATE_PERIOD_S);

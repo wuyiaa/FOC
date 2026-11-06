@@ -1,6 +1,7 @@
 #include "common.h"
 #include "pid.h"
 #include "encoder_zero_calibration.h"
+#include "B_J_Tf_Identification.h"
 
 #include <string.h>
 
@@ -186,12 +187,24 @@ void pmsm_motor_init(void)
     pm.motor.ld = 0.001423f;
     pm.motor.rs = 6.617f;
     pm.motor.phif = 0.014f;
-    pm.motor.J = 0.0014562f;//0.008 0.0396f
-		pm.motor.B = 0.0009688f; //0.00026334f
+    pm.motor.J = 0.000018f;//0.008 0.0396f  0.000238  0.0014562
+		pm.motor.B = 0.000228f; //0.00026334f  0.000232  0.0009688
 		pm.motor.static_friction_torque = 0.009702f;
     pm.motor.speed_damping_ratio = 1.0f;
-	  pm.motor.Tf = 0.0110572f;
+	  pm.motor.Tf = 0.011252f; //0.011329  0.0110572
     pm.motor.pn = 11U;
+		pm.motor.Kt = 1.5f * pm.motor.pn*pm.motor.phif;
+    /* Defaults above are used only when no valid identified record exists. */
+    motor_identification_requested = FOC_MOTOR_IDENTIFICATION_ENABLE;
+    motor_identification.flash_loaded = 0U;
+    if (motor_parameters_flash_load(&pm.motor) == HAL_OK)
+    {
+        motor_identification.J = pm.motor.J;
+        motor_identification.B = pm.motor.B;
+        motor_identification.Tf = pm.motor.Tf;
+        motor_identification.flash_loaded = 1U;
+        motor_identification_requested = 0U;
+    }
 }
 
 void pmsm_init(void)

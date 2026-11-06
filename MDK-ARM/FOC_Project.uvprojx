@@ -657,6 +657,16 @@
               <FilePath>../User/bsp/sample_time.h</FilePath>
             </File>
             <File>
+              <FileName>flash_save.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../User/bsp/flash_save.c</FilePath>
+            </File>
+            <File>
+              <FileName>flash_save.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../User/bsp/flash_save.h</FilePath>
+            </File>
+            <File>
               <FileName>pwm_capture.c</FileName>
               <FileType>1</FileType>
               <FilePath>../User/bsp/pwm_capture.c</FilePath>
@@ -750,6 +760,16 @@
               <FileName>motor_speed.h</FileName>
               <FileType>5</FileType>
               <FilePath>../User/motor/motor_speed.h</FilePath>
+            </File>
+            <File>
+              <FileName>B_J_Tf_Identification.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../User/motor/B_J_Tf_Identification.c</FilePath>
+            </File>
+            <File>
+              <FileName>B_J_Tf_Identification.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../User/motor/B_J_Tf_Identification.h</FilePath>
             </File>
             <File>
               <FileName>motor_POS.c</FileName>

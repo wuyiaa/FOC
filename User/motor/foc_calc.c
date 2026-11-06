@@ -244,7 +244,7 @@ void foc_electrical_angle_update(pmsm_t *pm)
 //}
 
 //pm->foc.electrical_angle_rad = theta_e;
-				
+//pm->foc.electrical_angle_rad_camp = theta_e;
 //				  sinf_e = sinf(pm->foc.electrical_angle_rad);
 //        cosf_e = cosf(pm->foc.electrical_angle_rad);
 //        trig_functions_rad(pm->foc.electrical_angle_rad,

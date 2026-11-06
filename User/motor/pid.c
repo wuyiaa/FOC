@@ -42,9 +42,9 @@ volatile float foc_iq_pid_parameters[PID_PARAMETER_COUNT] =
 };
 
 volatile float foc_speed_pid_parameters[PID_PARAMETER_COUNT] =
-{// 0.015 0.18
-    0.015f, /* Continuous-time Kp, calculated from motor parameters. */
-    0.13f, /* Continuous-time Ki; dt is applied by pid_axis_calculate. */
+{
+    0.1f, /* 0.015f */
+    0.13f, /* 0.13 */
     0.0f,
     5.0f, /* Maximum positive/negative iq reference, A. */
     0.5f, /* Integral limit, A. *///0.5f
@@ -296,14 +296,14 @@ void foc_current_pid_update(pmsm_t *pm, float dt, uint8_t feedforward_enable)
 static void foc_speed_pid_parameters_update(const pmsm_t *pm)
 {
     const float omega = TWO_PI * FOC_CURRENT_LOOP_BANDWIDTH_DEFAULT_HZ * 0.1f;
-    const float torque_constant = 1.5f * (float)pm->motor.pn * pm->motor.phif;
 
 //    foc_speed_pid_parameters[0] = 2.0f * pm->motor.speed_damping_ratio *
-//        omega * pm->motor.J / torque_constant;
+//        omega * pm->motor.J / pm->motor.Kt;
 //    foc_speed_pid_parameters[1] = omega * omega *
-//        pm->motor.J / torque_constant;
+//        pm->motor.J / pm->motor.Kt;
 //	foc_speed_pid_parameters[0] = spd_p;
 //	foc_speed_pid_parameters[1] = spd_i;
+		foc_speed_pid_parameters[4] = pm->speed.observer_torque_3th.load_torque_nm_hat / pm->motor.Kt;
     pid_load_parameters(&foc_speed_pid, foc_speed_pid_parameters);
 }
 
@@ -356,10 +356,14 @@ void foc_position_pid_init(pmsm_t *pm)
 void foc_position_pid_update(pmsm_t *pm, float dt)
 {
     const float old_integral = foc_position_pid.integral_output;
-    float error = pm->pos.mechanical_angle_rad_ref -
-                  pm->pos.mechanical_angle_rad_fdb;
+    float error;
     float output;
     float delta_integral;
+
+	 	pm->pos.mechanical_angle_rad_ref = pm->pos.mechanical_angle_deg_ref * (TWO_PI / 360.0f);
+
+    error = pm->pos.mechanical_angle_rad_ref -
+            pm->pos.mechanical_angle_rad_fdb;
 
     if (foc_pwm_output_is_enabled() == 0U)
     {

@@ -10,6 +10,9 @@ extern volatile uint8_t encoder_zero_calibration_requested;
 HAL_StatusTypeDef encoder_zero_flash_load(volatile pmsm_encoder_zero_cal_t *config);
 HAL_StatusTypeDef encoder_zero_flash_save(const volatile pmsm_encoder_zero_cal_t *config);
 
+/* Used by flash_save to retain the latest complete encoder record. */
+uint8_t encoder_zero_flash_record_valid(uint64_t record);
+
 #if ((FOC_ENCODER_ZERO_CALIBRATION_MODE != 0U) || \
      (FOC_PHASE_AUTO_CALIBRATION_MODE != 0U))
 void foc_encoder_zero_calibration_init(void);

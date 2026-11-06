@@ -25,7 +25,8 @@
 #define FOC_PHASE_AUTO_CALIBRATION_MODE      0U
 #endif
 
-/* 1: identify J/B/Tf on each motor start, then pause and disable MOS outputs. */
+/* 1: key start requests a new J/B/Tf run; stop and save once on completion.
+   Boot restores saved parameters; identify automatically only if none exist. */
 #ifndef FOC_MOTOR_IDENTIFICATION_ENABLE
 #define FOC_MOTOR_IDENTIFICATION_ENABLE      0U
 #endif
@@ -111,6 +112,7 @@ typedef struct
     float speed_damping_ratio; /* Dimensionless speed-loop damping ratio. */
 	  float Tf;
     uint8_t pn;
+	  float Kt;
 } pmsm_motor_t;
 
 typedef struct
