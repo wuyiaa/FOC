@@ -10,7 +10,8 @@
 #define MOTOR_IDENT_DECELERATION_RAD_S2     -2500.0f
 #define MOTOR_IDENT_WINDOW_LOW_RAD_S         30.0f
 #define MOTOR_IDENT_WINDOW_HIGH_RAD_S        45.0f
-#define MOTOR_IDENT_SPEED_TOLERANCE_RAD_S      2.0f
+#define MOTOR_IDENT_LOW_SPEED_TOLERANCE_RAD_S  3.0f //25 rad/s 阶段的允许偏差。3.0f 表示允许范围 22～28 rad/s
+#define MOTOR_IDENT_SPEED_TOLERANCE_RAD_S      3.0f //- 50 rad/s 阶段的允许偏差。3.0f 表示允许范围 47～53 rad/s
 #define MOTOR_IDENT_SETTLE_TIME_S              1.0f
 #define MOTOR_IDENT_AVERAGE_TIME_S             1.0f
 #define MOTOR_IDENT_SETTLE_TICKS \

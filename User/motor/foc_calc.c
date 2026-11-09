@@ -2,6 +2,7 @@
 #include "encoder_zero_calibration.h"
 #include "phase_auto_calibration.h"
 #include "trig_lut.h"
+#include "eccentricity_identification.h"
 
 #include <math.h>
 
@@ -166,7 +167,6 @@ void inverse_clarke_transform(pmsm_foc_t *foc)
     foc->i_c_ref = -0.5f * foc->i_alpha - HALF_SQRT3 * foc->i_beta;
 }
 
-float theta_e;
 //float sinf_e;
 //float cosf_e;
 void foc_angle_reset(pmsm_t *pm)
@@ -187,11 +187,27 @@ void foc_angle_reset(pmsm_t *pm)
     pm->foc.angle_valid = 0U;
     pm->foc.mechanical_angle_rad = 0.0f;
     pm->foc.electrical_angle_rad = 0.0f;
+    pm->foc.electrical_angle_rad_ecc = 0.0f;
     pm->foc.electrical_angle_rad_camp = 0.0f;
     pm->foc.sin_theta = 0.0f;
     pm->foc.cos_theta = 1.0f;
     pm->foc.sin_theta_camp = 0.0f;
     pm->foc.cos_theta_camp = 1.0f;
+}
+
+void foc_VF(pmsm_t *pm)
+{
+    static float theta_e;
+
+    pm->foc.id_ref = 0.5f;
+    pm->foc.iq_ref = 0.0f;
+    theta_e += 50.0f * PWM_PERIOD_S;
+    if (theta_e >= TWO_PI)
+    {
+        theta_e -= TWO_PI;
+    }
+    pm->foc.electrical_angle_rad = theta_e;
+    pm->foc.electrical_angle_rad_camp = theta_e;
 }
 
 void foc_electrical_angle_update(pmsm_t *pm)
@@ -220,14 +236,29 @@ void foc_electrical_angle_update(pmsm_t *pm)
         pm->foc.electrical_angle_rad = 0.0f;
         pm->foc.sin_theta = 0.0f;
         pm->foc.cos_theta = 1.0f;
+        pm->foc.electrical_angle_rad_camp = 0.0f;
+        pm->foc.sin_theta_camp = 0.0f;
+        pm->foc.cos_theta_camp = 1.0f;
     }
     else
     {
+				
+#if (FOC_VF != 0U)
+        (void)electrical_count;
+#elif (FOC_ECCENTRICITY_IDENTIFICATION_ENABLE != 0U)
+        (void)electrical_count;
+        eccentricity_identification(pm);
+#else
         pm->foc.electrical_angle_rad = (float)calibration.electrical_direction *
             (float)electrical_count * AS5047P_RAD_PER_COUNT;
 				
-				pm->foc.electrical_angle_rad_camp = pm->foc.electrical_angle_rad + 
-				1.5f * PWM_PERIOD_S * (float)calibration.electrical_direction / MOTOR_SPEED_DIRECTION*pm->speed.electrical_rad_s_filtered;
+				eccentricity_compensation_observe(pm);
+				
+				pm->foc.electrical_angle_rad = pm->foc.electrical_angle_rad_ecc;
+
+        pm->foc.electrical_angle_rad_camp = pm->foc.electrical_angle_rad +
+            1.5f * PWM_PERIOD_S * (float)calibration.electrical_direction /
+            MOTOR_SPEED_DIRECTION * pm->speed.electrical_rad_s_filtered;
         if (pm->foc.electrical_angle_rad_camp <= -TWO_PI)
         {
             pm->foc.electrical_angle_rad_camp += TWO_PI;
@@ -236,19 +267,14 @@ void foc_electrical_angle_update(pmsm_t *pm)
         {
             pm->foc.electrical_angle_rad_camp -= TWO_PI;
         }
-//theta_e += 100 * PWM_PERIOD_S;  // PWM_PERIOD_S = 0.00005f
 
-//if (theta_e >= TWO_PI)
-//{
-//    theta_e -= TWO_PI;
-//}
-
-//pm->foc.electrical_angle_rad = theta_e;
-//pm->foc.electrical_angle_rad_camp = theta_e;
+#endif
+				
 //				  sinf_e = sinf(pm->foc.electrical_angle_rad);
 //        cosf_e = cosf(pm->foc.electrical_angle_rad);
 //        trig_functions_rad(pm->foc.electrical_angle_rad,
 //                           &pm->foc.sin_theta, &pm->foc.cos_theta);
+				
 				pm->foc.sin_theta = sinf(pm->foc.electrical_angle_rad);
         pm->foc.cos_theta = cosf(pm->foc.electrical_angle_rad);
 				pm->foc.sin_theta_camp = sinf(pm->foc.electrical_angle_rad_camp);
@@ -285,6 +311,9 @@ void inverse_park_transform(pmsm_t *pm)
         pm->foc.electrical_angle_rad = 0.0f;
         pm->foc.sin_theta = 0.0f;
         pm->foc.cos_theta = 1.0f;
+        pm->foc.electrical_angle_rad_camp = 0.0f;
+        pm->foc.sin_theta_camp = 0.0f;
+        pm->foc.cos_theta_camp = 1.0f;
     }
 //		pm->foc.sin_theta = 0.0f;
 //        pm->foc.cos_theta = 1.0f;

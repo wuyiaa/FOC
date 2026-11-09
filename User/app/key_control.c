@@ -53,7 +53,7 @@ static void key1_process(void)
         /* A latched encoder/current fault keeps the PWM disabled. */
         if (foc_pwm_output_enable(&pm) == HAL_OK)
         {
-#if (FOC_MOTOR_IDENTIFICATION_ENABLE != 0U)
+#if (FOC_J_B_Tf_IDENTIFICATION_ENABLE != 0U)
           /* Start a fresh run even when parameters were restored from Flash.
              The first TIM7 step clears the previous observations/save latch. */
           motor_identification.stage = MOTOR_IDENT_IDLE;

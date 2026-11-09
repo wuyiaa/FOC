@@ -51,19 +51,27 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
         foc_current_calc(&pm);
         
 				(void)as5047p_read_blocking(&pm.encoder, &pm.encoder_foc_sample);
+#if ((FOC_VF != 0U) && (FOC_ENCODER_ZERO_CALIBRATION_MODE == 0U) && \
+     (FOC_PHASE_AUTO_CALIBRATION_MODE == 0U))
+        foc_VF(&pm);
+#endif
 				foc_electrical_angle_update(&pm);
 				
-				pm.foc.id_fdb_filtered  += ID_FILTER_ALPHA * (pm.foc.id_fdb - pm.foc.id_fdb_filtered);
-				pm.foc.iq_fdb_filtered  += ID_FILTER_ALPHA * (pm.foc.iq_fdb - pm.foc.iq_fdb_filtered);
-				pm.foc.Is_filtered = sqrtf(pm.foc.id_fdb_filtered*pm.foc.id_fdb_filtered + pm.foc.iq_fdb_filtered*pm.foc.iq_fdb_filtered);
+//				pm.foc.id_fdb_filtered  += ID_FILTER_ALPHA * (pm.foc.id_fdb - pm.foc.id_fdb_filtered);
+//				pm.foc.iq_fdb_filtered  += ID_FILTER_ALPHA * (pm.foc.iq_fdb - pm.foc.iq_fdb_filtered);
+//				pm.foc.Is_filtered = sqrtf(pm.foc.id_fdb_filtered*pm.foc.id_fdb_filtered + pm.foc.iq_fdb_filtered*pm.foc.iq_fdb_filtered);
 #if ((FOC_ENCODER_ZERO_CALIBRATION_MODE == 0U) && \
-     (FOC_PHASE_AUTO_CALIBRATION_MODE == 0U))
+     (FOC_PHASE_AUTO_CALIBRATION_MODE == 0U) && \
+     (FOC_ECCENTRICITY_IDENTIFICATION_ENABLE == 0U))
+#if (FOC_VF == 0U)
 				pm.foc.id_ref = 0.0f;
-        pm.foc.iq_ref = foc_speed_pid.output 
-											+	(pm.speed.observer_torque_3th.load_torque_nm_hat/pm.motor.Kt);//foc_speed_pid.output;  0.042
+        pm.foc.iq_ref = foc_speed_pid.output +	(pm.speed.observer_torque_3th.load_torque_nm_hat/pm.motor.Kt);//foc_speed_pid.output;  0.042
+											
+#endif
         foc_current_pid_update(&pm, PWM_PERIOD_S, 0U);
 #endif
-pm.foc.Ud_ref_filtered += ID_FILTER_ALPHA * (pm.foc.Ud_ref - pm.foc.Ud_ref_filtered);
+				
+//pm.foc.Ud_ref_filtered += ID_FILTER_ALPHA * (pm.foc.Ud_ref - pm.foc.Ud_ref_filtered);
 //				 pm.foc.Ud_ref = 0.0f;//2.0f
 //				 pm.foc.Uq_ref = 13.0f;//13.163f
         foc_voltage_calc(&pm, voltage_sample.vbus_v, pm.svpwm.vref2_min);//voltage_sample.vbus_v pm.svpwm.vref2_min
@@ -85,14 +93,14 @@ void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
         foc_electrical_angle_update(&pm);
     }
 }
-
+//float wc_l;//500
 /* TIM7: speed updates at 2 kHz; TIM3: position updates at 1 kHz. */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
     if (htim->Instance == TIM7)
     {   
-				float wc_l = 500.0f;
-			
+				
+			float wc_l = 500.0f;
         motor_speed_update(&pm.speed, &pm.encoder_foc_sample, pm.motor.pn);
         speed_LPF_filtered(&pm.speed, pm.motor.pn);
 			  
@@ -115,19 +123,22 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 			
 			//MOTOR_SPEED_TORQUE_LUENBERGER_3TH_POLE_RAD_S
 #if ((FOC_ENCODER_ZERO_CALIBRATION_MODE == 0U) && \
-     (FOC_PHASE_AUTO_CALIBRATION_MODE == 0U))
+     (FOC_PHASE_AUTO_CALIBRATION_MODE == 0U) && (FOC_VF == 0U) && \
+     (FOC_ECCENTRICITY_IDENTIFICATION_ENABLE == 0U))
         /* Match the position-angle direction to the speed convention. */
 				
 				//如果反馈使用低通和二阶就要注意方向了
-        pm.speed.mechanical_rad_s_ref = foc_position_pid.output;	
-				 foc_position_pid.output * MOTOR_SPEED_DIRECTION * (float)calibration.electrical_direction;
+#if (FOC_J_B_Tf_IDENTIFICATION_ENABLE == 0U)
+        pm.speed.mechanical_rad_s_ref = 20.0f;//foc_position_pid.output;	
+//						 foc_position_pid.output * MOTOR_SPEED_DIRECTION * (float)calibration.electrical_direction;
 				
+#endif
 			  pm.speed.mechanical_rad_s_fdb = pm.speed.observer_torque_3th.mechanical_rad_s_hat; 
 //				pm.speed.mechanical_rad_s_filtered  pm.speed.observer_2nd.mechanical_rad_s_hat
 //				pm.speed.observer_torque_3th.mechanical_rad_s_hat
 			
 			
-#if (FOC_MOTOR_IDENTIFICATION_ENABLE != 0U)
+#if (FOC_J_B_Tf_IDENTIFICATION_ENABLE != 0U)
         if (motor_identification_requested != 0U)
         {
             J_B_Tf_Indent(&pm.speed, pm.foc.iq_fdb,
@@ -145,6 +156,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
                 }
             }
         }
+        else
+        {
+            pm.speed.mechanical_rad_s_ref = 0.0f;
+        }
 #endif
 
         foc_speed_pid_update(&pm, MOTOR_SPEED_UPDATE_PERIOD_S);
@@ -153,11 +168,13 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     }
     else if (htim->Instance == TIM3)
     {
-      motor_pos_update();
 			pm.pos.mechanical_angle_deg_ref = 30.2f;
+			motor_pos_update();
 			
 #if ((FOC_ENCODER_ZERO_CALIBRATION_MODE == 0U) && \
-     (FOC_PHASE_AUTO_CALIBRATION_MODE == 0U))
+     (FOC_PHASE_AUTO_CALIBRATION_MODE == 0U) && (FOC_VF == 0U) && \
+     (FOC_ECCENTRICITY_IDENTIFICATION_ENABLE == 0U) && \
+     (FOC_J_B_Tf_IDENTIFICATION_ENABLE == 0U))
         foc_position_pid_update(&pm, MOTOR_POS_UPDATE_PERIOD_S);
 #endif
     }

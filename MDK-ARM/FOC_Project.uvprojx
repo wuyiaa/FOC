@@ -54,7 +54,7 @@
           <CreateLib>0</CreateLib>
           <CreateHexFile>1</CreateHexFile>
           <DebugInformation>1</DebugInformation>
-          <BrowseInformation>0</BrowseInformation>
+          <BrowseInformation>1</BrowseInformation>
           <ListingPath>D:\meiyeshizhongcuo\Documents\</ListingPath>
           <HexFormatSelection>1</HexFormatSelection>
           <Merge32K>0</Merge32K>
@@ -780,6 +780,16 @@
               <FileName>motor_POS.h</FileName>
               <FileType>5</FileType>
               <FilePath>../User/motor/motor_POS.h</FilePath>
+            </File>
+            <File>
+              <FileName>eccentricity_identification.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../User/motor/eccentricity_identification.c</FilePath>
+            </File>
+            <File>
+              <FileName>eccentricity_identification.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>../User/motor/eccentricity_identification.h</FilePath>
             </File>
             <File>
               <FileName>motor_config.h</FileName>

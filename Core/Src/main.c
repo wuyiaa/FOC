@@ -34,6 +34,7 @@
 #include "sample_time.h"
 #include "vofa.h"
 #include "voltage_sample.h"
+#include "eccentricity_identification.h"
 
 /* USER CODE END Includes */
 
@@ -181,6 +182,7 @@ int main(void)
                                     calibration.phase_reversed);
     vofa_process();
     key_control_process();
+    eccentricity_compensation_save_process();
 
 #if ((FOC_ENCODER_ZERO_CALIBRATION_MODE != 0U) || \
      (FOC_PHASE_AUTO_CALIBRATION_MODE != 0U))

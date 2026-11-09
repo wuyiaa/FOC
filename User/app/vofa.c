@@ -2,6 +2,7 @@
 #include "dwt_time.h"
 
 #include "common.h"
+#include "eccentricity_identification.h"
 #include "encoder_zero_calibration.h"
 #include "B_J_Tf_Identification.h"
 #include "usb_device.h"
@@ -65,6 +66,8 @@ static uint32_t vofa_send_tick_last;
 static uint8_t vofa_send_time_valid;
 //extern float sinf_e;
 //extern float cosf_e;
+extern float theta_e;
+
 static void vofa_send_time_update(void)
 {
     const uint32_t now_tick = HAL_GetTick();
@@ -130,33 +133,13 @@ static uint16_t vofa_packet_build(void)
     const uint32_t low_side_levels = GPIOB->IDR;
     const float vofa_values[] =
     {
-			
-//			/*J_B_Tf*/
-//			motor_identification.J,
-//			motor_identification.B,
-//			motor_identification.Tf,
-//			motor_identification.stage,
-//			pm.speed.observer_2nd.mechanical_rad_s_hat,
-//			pm.speed.mechanical_rad_s_ref,
-//			pm.speed.mechanical_rad_s_fdb,
-//			motor_identification.acceleration.acceleration_mean_rad_s2,
-//			
-//				pm.foc.iq_fdb,
-//				pm.foc.id_fdb,	
-//			
-//			motor_identification.acceleration.iq_mean_a,
-//			motor_identification.acceleration.acceleration_mean_rad_s2,
-//			motor_identification.acceleration.speed_mean_rad_s,
-
-//			motor_identification.deceleration.iq_mean_a,
-//			motor_identification.deceleration.acceleration_mean_rad_s2,
-//			motor_identification.deceleration.speed_mean_rad_s,
+/*********************************************控制器*********************************************************/
 
 //				/*电机电流环*/
-//				pm.foc.iq_fdb,
-//				pm.foc.id_fdb,		
-//				pm.foc.iq_ref,	
-//				pm.foc.id_ref,
+//				pm.foc.iq_ref,
+//				pm.foc.iq_fdb,	
+//				pm.foc.id_ref,	
+//				pm.foc.id_fdb,				
 //				pm.foc.Uq_ref,
 //				pm.foc.Ud_ref,
 //				pm.speed.observer_torque_3th.load_torque_nm_hat/pm.motor.Kt,
@@ -169,19 +152,24 @@ static uint16_t vofa_packet_build(void)
 //			foc_speed_pid.error,
 //			foc_speed_pid.p_output,
 //			foc_speed_pid.integral_output,
-//			
+//			pm.speed.observer_torque_3th.load_torque_nm_hat/pm.motor.Kt,
+//												
+								
 //			/*电机位置环*/
-//			pm.pos.mechanical_angle_deg_fdb,
-//			pm.pos.mechanical_angle_deg_ref,
 //			pm.pos.mechanical_angle_deg_ref,
 //			pm.pos.mechanical_angle_deg_fdb,
+//			pm.pos.mechanical_angle_rad_ref,
+//			pm.pos.mechanical_angle_rad_fdb,
+//			theta_e,
+//			pm.encoder.mechanical_angle_rad_latest,
+//			pm.foc.mechanical_angle_rad,
 //			foc_position_pid.error*57.32f,
 //			foc_position_pid.p_output,
 //			foc_position_pid.integral_output,
 //			foc_position_pid.output,
 			
-			
-						/*电机角度*/		
+/*********************************************控制量*********************************************************/
+					/*电机角度*/		
 //				pm.foc.mechanical_angle_rad,
 //				pm.foc.electrical_angle_rad,
 //				pm.foc.electrical_angle_rad_camp,
@@ -195,28 +183,12 @@ static uint16_t vofa_packet_build(void)
 			pm.speed.mechanical_rad_s_filtered,
 //			pm.speed.observer_2nd.mechanical_rad_s_hat,
 //			pm.speed.observer_3th.mechanical_rad_s_hat,
-			pm.speed.observer_torque_3th.mechanical_rad_s_hat,
+//			pm.speed.observer_torque_3th.mechanical_rad_s_hat,
 //			pm.speed.observer_torque_3th.load_torque_nm_hat,
-//			pm.speed.mechanical_rad_s_ref,
+			pm.speed.mechanical_rad_s_ref,
 
 //				pm.speed.observer_3th.mechanical_angle_rad_hat,
-			
-			/*编码器计数报错*/
-//				pm.encoder.parity_error_count,
-//				pm.encoder.sensor_error_count,
-//				pm.encoder.busy_skip_count ,
-//				pm.encoder.encoder_sample_sequence,
-//				pm.foc.mechanical_angle_rad,
-//		  	pm.                                                                                                                    foc.electrical_angle_rad,
-//			 (float)pm.encoder_foc_sample.raw,
-//			calibration.current_direction,
-//			 sinf_e,
-//			 cosf_e,
-//			 pm.foc.sin_theta, 
-//			 pm.foc.cos_theta,
-//			 sinf_e-pm.foc.sin_theta,
-//			 cosf_e-pm.foc.cos_theta,
-			
+						
 			/*反馈相电流*/
 //				pm.foc.ia.nonrecon,   
 //				pm.foc.ib.nonrecon,   
@@ -228,17 +200,105 @@ static uint16_t vofa_packet_build(void)
 //			pm.foc.i_alpha,              /* CH5: alpha-axis current (A) */
 //			pm.foc.i_beta,               /* CH6: beta-axis current (A) */
 
+//				pm.foc.iq_fdb,
+//				pm.foc.d_fdb,	
+
+/*********************************************辨识*********************************************************/
+
 			/*反馈相电阻*/
 //				pm.foc.Ud_ref/pm.foc.Is_filtered,
 //				pm.foc.Ud_ref/pm.foc.id_fdb_filtered,
 //				pm.foc.Ud_ref_filtered/pm.foc.id_ref,			
 //				pm.foc.iq_fdb,
 //				pm.foc.iq_fdb_filtered,			
-////				pm.foc.id_fdb,	
-//        pm.foc.id_fdb_filtered,			
-////							
-//pm.foc.Is_filtered,
+//				pm.foc.id_fdb,	
+//        pm.foc.id_fdb_filtered,										
+//				pm.foc.Is_filtered,
 
+				/*偏心补偿辨识*/
+//				foc_open_loop_angle_measure.mechanical_angle_deg_ref,    // 强拖机械角度指令
+//				foc_open_loop_angle_measure.mechanical_angle_deg_fdb,    // 编码器连续机械角度
+//                foc_open_loop_angle_measure.mechanical_angle_deg_fdb_ecc, //补偿后连续机械角度
+//                foc_open_loop_angle_measure.correction_deg, //查表补偿量
+//                foc_open_loop_angle_measure.mechanical_angle_deg_error,   	//指令 − 补偿前角度
+//                foc_open_loop_angle_measure.mechanical_angle_deg_error_ecc, //指令 − 补偿后角度
+//				foc_open_loop_angle_measure.mechanical_angle_deg_error, //实时角度误差=CH0-CH1，未处理
+//				eccentricity_measure.offset_b_deg,                /* CH3: 整圈配对误差的平均偏移b */
+//				eccentricity_measure.paired_error_deg_display,    /* CH4: 抵消摩擦、减去b，再经过FIR的误差 */
+//				eccentricity_measure.paired_error_deg_before_fir_display, /* CH5: 抵消摩擦、减去b后，FIR前的误差 */
+//				eccentricity_measure.paired_angle_deg_display,    /* CH6: CH4、CH5对应的机械角度 */
+//				(float)eccentricity_measure.done,                 /* CH7: 完成标志:0=采集或计算中，1=完成并回放 */
+//				pm.speed.mechanical_rad_s_fdb,										/* CH8*/
+
+				eccentricity_compensation.mechanical_angle_deg_before, //偏心补偿前	/* CH9*/
+				eccentricity_compensation.mechanical_angle_deg_after,	 //偏心补偿后	/* CH10*/
+//				eccentricity_compensation.correction_deg, 			//补偿表						/* CH11*/
+//				(float)eccentricity_compensation.ready,					//表准备完成标志		/* CH12*/
+//					(float)eccentricity_compensation.flash_saved, 	//Flash 保存成功标志 不太准 建议看下一个/* CH13*/
+//				((eccentricity_compensation.flash_saved == 1U) && (eccentricity_compensation.flash_loaded == 0U))	,
+//				eccentricity_compensation.save_pending,
+//				eccentricity_compensation.flash_status,
+
+
+
+//			/*J_B_Tf*/
+//			motor_identification.J,
+//			motor_identification.B,
+//			motor_identification.Tf,
+//			motor_identification.stage,
+//			pm.speed.observer_2nd.mechanical_rad_s_hat,
+//			pm.speed.mechanical_rad_s_ref,
+//			pm.speed.mechanical_rad_s_fdb,
+//			motor_identification.acceleration.acceleration_mean_rad_s2,
+//			
+//			pm.foc.iq_fdb,
+//			pm.foc.id_fdb,	
+//			
+//			motor_identification.acceleration.iq_mean_a,
+//			motor_identification.acceleration.acceleration_mean_rad_s2,
+//			motor_identification.acceleration.speed_mean_rad_s,
+
+//			motor_identification.deceleration.iq_mean_a,
+//			motor_identification.deceleration.acceleration_mean_rad_s2,
+//			motor_identification.deceleration.speed_mean_rad_s,
+//			
+//			pm.motor.J, pm.motor.B, pm.motor.Tf,
+//			motor_identification.result_ready, //辨识计算完成
+//			motor_identification.flash_saved,  //结果已应用并成功保存到 Flash
+			
+			/*
+|  |  |
+|motor_identification.stage
+| 0  | 等待开始 |
+| 1  | 等待速度在 25±2 rad/s 内持续稳定 1 秒 |
+| 2  | 在 25 rad/s 匀速段，采集平均速度和反馈 iq，持续 1 秒 |
+| 3  | 等待速度在 50±2 rad/s 内持续稳定 1 秒 |
+| 4  | 在 50 rad/s 匀速段采集 1 秒，随后计算 B、Tf |
+| 5  | 返回 25 rad/s，等待稳定 |
+| 6  | 加速至 50 rad/s，采集反馈速度 30→45 rad/s 区间的数据 |
+| 7  | 在 50 rad/s 等待稳定 |
+| 8  | 减速至 25 rad/s，采集反馈速度 45→30 rad/s 区间的数据，随后计算 J |
+| 9  | 辨识完成，随后关闭 MOS 并保存结果 |
+| 10 | 辨识失败，关闭 MOS |
+*/
+
+//				/*电机角度零点偏移采样*/
+//				(float)pm.encoder_foc_sample.raw,
+////				(float)calibration.sampling,
+//				(float)calibration.done,
+//					calibration.failed,
+////				(float)calibration.sample_count,
+//				(float)calibration.mechanical_zero_raw,
+//					calibration.flash_saved,
+//				(float)calibration.mechanical_zero_angle_rad
+
+				/*三相校准*/
+//				calibration.done,
+//				calibration.phase_reversed,
+//				calibration.electrical_direction,
+//				calibration.current_direction,
+//				calibration.flash_saved,
+/*********************************************采集数据*********************************************************/
 //			
 //			/*目标相电流*/
 //				pm.foc.iq_ref,	
@@ -336,14 +396,24 @@ static uint16_t vofa_packet_build(void)
 
 //        pm.current_sample.i_sum_before_reconstruction /* CH17: A+B+C before reconstruction (A) */
 //				pm.foc.ia.reconstructed+pm.foc.ib.reconstructed+pm.foc.ic.reconstructed,
+/*********************************************编码器*********************************************************/
 
-//				/*电机角度零点偏移采样*/
-//				(float)pm.encoder_foc_sample.raw,
-//				(float)calibration.sampling,
-//				(float)calibration.done,
-//				(float)calibration.sample_count,
-//				(float)calibration.mechanical_zero_raw
-//				(float)calibration.mechanical_zero_angle_rad
+			/*编码器计数报错*/
+//				pm.encoder.parity_error_count,
+//				pm.encoder.sensor_error_count,
+//				pm.encoder.busy_skip_count ,
+//				pm.encoder.encoder_sample_sequence,
+//				pm.foc.mechanical_angle_rad,
+//		  	pm.                                                                                                                    foc.electrical_angle_rad,
+//			 (float)pm.encoder_foc_sample.raw,
+//			calibration.current_direction,
+//			 sinf_e,
+//			 cosf_e,
+//			 pm.foc.sin_theta, 
+//			 pm.foc.cos_theta,
+//			 sinf_e-pm.foc.sin_theta,
+//			 cosf_e-pm.foc.cos_theta,
+
     };
     uint16_t channel_count;
     uint16_t i;

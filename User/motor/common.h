@@ -27,8 +27,16 @@
 
 /* 1: key start requests a new J/B/Tf run; stop and save once on completion.
    Boot restores saved parameters; identify automatically only if none exist. */
-#ifndef FOC_MOTOR_IDENTIFICATION_ENABLE
-#define FOC_MOTOR_IDENTIFICATION_ENABLE      0U
+#ifndef FOC_J_B_Tf_IDENTIFICATION_ENABLE
+#define FOC_J_B_Tf_IDENTIFICATION_ENABLE     0U
+#endif
+
+#ifndef FOC_ECCENTRICITY_IDENTIFICATION_ENABLE
+#define FOC_ECCENTRICITY_IDENTIFICATION_ENABLE 		0U
+#endif
+
+#ifndef FOC_VF
+#define FOC_VF                              0U
 #endif
 
 #define ENCODER_ZERO_ALIGN_TIME_S            1U
@@ -48,6 +56,14 @@
 #if ((FOC_ENCODER_ZERO_CALIBRATION_MODE != 0U) && \
      (FOC_PHASE_AUTO_CALIBRATION_MODE != 0U))
 #error "Select either encoder zero calibration or phase auto calibration"
+#endif
+
+#if (((FOC_ENCODER_ZERO_CALIBRATION_MODE != 0U) + \
+      (FOC_PHASE_AUTO_CALIBRATION_MODE != 0U) + \
+      (FOC_J_B_Tf_IDENTIFICATION_ENABLE != 0U) + \
+      (FOC_ECCENTRICITY_IDENTIFICATION_ENABLE != 0U) + \
+      (FOC_VF != 0U)) > 1)
+#error "Select only one calibration, identification or VF mode"
 #endif
 
 /* TIM1 PWM and ADC current-sampling window, expressed in timer ticks. */
@@ -151,6 +167,7 @@ typedef struct
     float u_alpha;
     float u_beta;
     float electrical_angle_rad;
+    float electrical_angle_rad_ecc;
 		float electrical_angle_rad_camp;
     float sin_theta;
 		float sin_theta_camp;
@@ -274,6 +291,22 @@ typedef struct
     pmsm_foc_measure_t foc_measure;
 } pmsm_t;
 
+/* Diagnostic values only: they do not feed any controller. */
+typedef struct
+{
+    float mechanical_angle_rad_ref;
+    float mechanical_angle_rad_fdb;
+    float mechanical_angle_rad_error;
+    float mechanical_angle_deg_ref;
+    float mechanical_angle_deg_fdb;
+    float mechanical_angle_deg_error;
+    float mechanical_angle_deg_fdb_ecc;
+    float correction_deg;
+    float mechanical_angle_deg_error_ecc;
+} foc_open_loop_angle_measure_t;
+
+extern foc_open_loop_angle_measure_t foc_open_loop_angle_measure;
+
 extern pmsm_t pm;
 
 void pmsm_board_init(void);
@@ -283,6 +316,7 @@ void foc_get_curr_off(void);
 void foc_adc_sample(pmsm_t *pm);
 void foc_current_sample_process(pmsm_t *pm);
 void foc_angle_reset(pmsm_t *pm);
+void foc_VF(pmsm_t *pm);
 void foc_electrical_angle_update(pmsm_t *pm);
 void clarke_transform(pmsm_foc_t *foc, uint8_t full_clarke);
 void inverse_clarke_transform(pmsm_foc_t *foc);

@@ -1,6 +1,7 @@
 #include "flash_save.h"
 #include "encoder_zero_calibration.h"
 #include "B_J_Tf_Identification.h"
+#include "eccentricity_identification.h"
 #include "stm32g4xx_hal_flash_ex.h"
 
 #define FLASH_SAVE_PAGE 127U
@@ -41,12 +42,20 @@ HAL_StatusTypeDef flash_save_append(const uint64_t *words,
     FLASH_EraseInitTypeDef erase = {0};
     uint64_t latest_encoder = FLASH_SAVE_ERASED;
     uint64_t latest_motor[MOTOR_PARAMETERS_RECORD_WORDS];
+    static uint64_t compact_words[FLASH_SAVE_RECORD_COUNT];
+    uint32_t latest_eccentricity = FLASH_SAVE_RECORD_COUNT;
+    uint32_t compact_count;
     uint8_t motor_found = 0U;
     uint32_t next = 0U;
     uint32_t i;
     uint32_t j;
     uint32_t page_error = 0xFFFFFFFFUL;
     HAL_StatusTypeDef status;
+
+    if ((count == 0U) || (count > FLASH_SAVE_RECORD_COUNT))
+    {
+        return HAL_ERROR;
+    }
 
 #if defined(FLASH_OPTR_DBANK)
     if (((FLASH->OPTR & FLASH_OPTR_DBANK) == 0U) ||
@@ -63,6 +72,14 @@ HAL_StatusTypeDef flash_save_append(const uint64_t *words,
         if (records[i] != FLASH_SAVE_ERASED)
         {
             next = i + 1U;
+        }
+        if ((i + ECCENTRICITY_FLASH_RECORD_WORDS <= FLASH_SAVE_RECORD_COUNT) &&
+            (eccentricity_flash_record_valid(&records[i]) != 0U))
+        {
+            latest_eccentricity = i;
+            next = i + ECCENTRICITY_FLASH_RECORD_WORDS;
+            i += ECCENTRICITY_FLASH_RECORD_WORDS - 1U;
+            continue;
         }
         if (encoder_zero_flash_record_valid(records[i]) != 0U)
         {
@@ -85,6 +102,37 @@ HAL_StatusTypeDef flash_save_append(const uint64_t *words,
     }
     if (next + count > FLASH_SAVE_RECORD_COUNT)
     {
+        compact_count = 0U;
+        if (latest_encoder != FLASH_SAVE_ERASED)
+        {
+            compact_words[compact_count++] = latest_encoder;
+        }
+        if (motor_found != 0U)
+        {
+            for (j = 0U; j < MOTOR_PARAMETERS_RECORD_WORDS; j++)
+            {
+                compact_words[compact_count++] = latest_motor[j];
+            }
+        }
+        if ((latest_eccentricity < FLASH_SAVE_RECORD_COUNT) &&
+            !((count == ECCENTRICITY_FLASH_RECORD_WORDS) &&
+              (eccentricity_flash_record_valid(words) != 0U)))
+        {
+            for (j = 0U; j < ECCENTRICITY_FLASH_RECORD_WORDS; j++)
+            {
+                compact_words[compact_count++] = records[latest_eccentricity + j];
+            }
+        }
+        if (compact_count + count > FLASH_SAVE_RECORD_COUNT)
+        {
+            (void)HAL_FLASH_Lock();
+            return HAL_ERROR;
+        }
+        for (j = 0U; j < count; j++)
+        {
+            compact_words[compact_count + j] = words[j];
+        }
+        compact_count += count;
         erase.TypeErase = FLASH_TYPEERASE_PAGES;
         erase.Banks = FLASH_SAVE_BANK;
         erase.Page = FLASH_SAVE_PAGE;
@@ -94,20 +142,12 @@ HAL_StatusTypeDef flash_save_append(const uint64_t *words,
         {
             status = HAL_ERROR;
         }
-        next = 0U;
-        if ((status == HAL_OK) && (latest_encoder != FLASH_SAVE_ERASED))
+        if (status == HAL_OK)
         {
-            status = flash_save_program(next, &latest_encoder, 1U);
-            next++;
-        }
-        if ((status == HAL_OK) && (motor_found != 0U))
-        {
-            status = flash_save_program(next, latest_motor,
-                                                MOTOR_PARAMETERS_RECORD_WORDS);
-            next += MOTOR_PARAMETERS_RECORD_WORDS;
+            status = flash_save_program(0U, compact_words, compact_count);
         }
     }
-    if (status == HAL_OK)
+    else if (status == HAL_OK)
     {
         status = flash_save_program(next, words, count);
     }

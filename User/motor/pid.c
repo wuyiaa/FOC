@@ -13,7 +13,7 @@
  * Keil Watch can edit the bandwidth and both parameter arrays at runtime.
  * Bandwidth changes recalculate Kp/Ki once; voltage/integral limits update each cycle.
  */
-volatile float FOC_CURRENT_LOOP_BANDWIDTH_DEFAULT_HZ = 250.0f;
+volatile float FOC_CURRENT_LOOP_BANDWIDTH_DEFAULT_HZ = 500.0f;
 static float applied_bandwidth_hz = -1.0f;
 
 pid_controller_t foc_id_pid;
@@ -43,7 +43,7 @@ volatile float foc_iq_pid_parameters[PID_PARAMETER_COUNT] =
 
 volatile float foc_speed_pid_parameters[PID_PARAMETER_COUNT] =
 {
-    0.1f, /* 0.015f */
+    0.1f, /* 0.015f   0.1f*/
     0.13f, /* 0.13 */
     0.0f,
     5.0f, /* Maximum positive/negative iq reference, A. */
@@ -297,13 +297,13 @@ static void foc_speed_pid_parameters_update(const pmsm_t *pm)
 {
     const float omega = TWO_PI * FOC_CURRENT_LOOP_BANDWIDTH_DEFAULT_HZ * 0.1f;
 
-//    foc_speed_pid_parameters[0] = 2.0f * pm->motor.speed_damping_ratio *
-//        omega * pm->motor.J / pm->motor.Kt;
-//    foc_speed_pid_parameters[1] = omega * omega *
-//        pm->motor.J / pm->motor.Kt;
-//	foc_speed_pid_parameters[0] = spd_p;
-//	foc_speed_pid_parameters[1] = spd_i;
-		foc_speed_pid_parameters[4] = pm->speed.observer_torque_3th.load_torque_nm_hat / pm->motor.Kt;
+    foc_speed_pid_parameters[0] = 2.0f * pm->motor.speed_damping_ratio *
+        omega * pm->motor.J / pm->motor.Kt;
+    foc_speed_pid_parameters[1] = omega * omega *
+        pm->motor.J / pm->motor.Kt;
+////	foc_speed_pid_parameters[0] = spd_p;
+////	foc_speed_pid_parameters[1] = spd_i;
+		foc_speed_pid_parameters[4] = pm->speed.observer_torque_3th.load_torque_nm_hat / pm->motor.Kt * 10.0f;
     pid_load_parameters(&foc_speed_pid, foc_speed_pid_parameters);
 }
 

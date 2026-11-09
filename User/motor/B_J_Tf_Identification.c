@@ -134,7 +134,7 @@ uint8_t motor_parameters_flash_record_valid(const volatile uint64_t *record)
 
 /* Mechanical parameter identification, independent of speed feedback updates. */
 motor_identification_t motor_identification;
-volatile uint8_t motor_identification_requested = FOC_MOTOR_IDENTIFICATION_ENABLE;
+volatile uint8_t motor_identification_requested = FOC_J_B_Tf_IDENTIFICATION_ENABLE;
 
 void motor_identification_save_process(void)
 {
@@ -203,9 +203,10 @@ static void motor_ident_window_finish(motor_identification_window_t *window)
     window->completed = 1U;
 }
 
-static uint8_t motor_ident_settled(float speed_rad_s, float target_rad_s)
+static uint8_t motor_ident_settled(float speed_rad_s, float target_rad_s,
+                                  float tolerance_rad_s)
 {
-    if (fabsf(speed_rad_s - target_rad_s) <= MOTOR_IDENT_SPEED_TOLERANCE_RAD_S)
+    if (fabsf(speed_rad_s - target_rad_s) <= tolerance_rad_s)
     {
         motor_identification.stable_count++;
     }
@@ -341,7 +342,8 @@ void J_B_Tf_Indent(motor_speed_t *speed, float iq_fdb,
     {
         case MOTOR_IDENT_SETTLE_INITIAL:
             speed->mechanical_rad_s_ref = MOTOR_IDENT_LOW_SPEED_RAD_S;
-            if (motor_ident_settled(speed_rad_s, MOTOR_IDENT_LOW_SPEED_RAD_S) != 0U)
+            if (motor_ident_settled(speed_rad_s, MOTOR_IDENT_LOW_SPEED_RAD_S,
+                                    MOTOR_IDENT_LOW_SPEED_TOLERANCE_RAD_S) != 0U)
             {
                 motor_ident_window_begin(&motor_identification.steady_low,
                                         speed_rad_s, iq_fdb);
@@ -352,7 +354,7 @@ void J_B_Tf_Indent(motor_speed_t *speed, float iq_fdb,
         case MOTOR_IDENT_AVERAGE_LOW:
             speed->mechanical_rad_s_ref = MOTOR_IDENT_LOW_SPEED_RAD_S;
             if (fabsf(speed_rad_s - MOTOR_IDENT_LOW_SPEED_RAD_S) >
-                MOTOR_IDENT_SPEED_TOLERANCE_RAD_S)
+                MOTOR_IDENT_LOW_SPEED_TOLERANCE_RAD_S)
             {
                 motor_identification.stage = MOTOR_IDENT_SETTLE_INITIAL;
                 break;
@@ -368,7 +370,8 @@ void J_B_Tf_Indent(motor_speed_t *speed, float iq_fdb,
 
         case MOTOR_IDENT_SETTLE_HIGH:
             speed->mechanical_rad_s_ref = MOTOR_IDENT_HIGH_SPEED_RAD_S;
-            if (motor_ident_settled(speed_rad_s, MOTOR_IDENT_HIGH_SPEED_RAD_S) != 0U)
+            if (motor_ident_settled(speed_rad_s, MOTOR_IDENT_HIGH_SPEED_RAD_S,
+                                    MOTOR_IDENT_SPEED_TOLERANCE_RAD_S) != 0U)
             {
                 motor_ident_window_begin(&motor_identification.steady_high,
                                         speed_rad_s, iq_fdb);
@@ -396,7 +399,8 @@ void J_B_Tf_Indent(motor_speed_t *speed, float iq_fdb,
 
         case MOTOR_IDENT_RETURN_LOW:
             speed->mechanical_rad_s_ref = MOTOR_IDENT_LOW_SPEED_RAD_S;
-            if (motor_ident_settled(speed_rad_s, MOTOR_IDENT_LOW_SPEED_RAD_S) != 0U)
+            if (motor_ident_settled(speed_rad_s, MOTOR_IDENT_LOW_SPEED_RAD_S,
+                                    MOTOR_IDENT_LOW_SPEED_TOLERANCE_RAD_S) != 0U)
             {
                 motor_identification.stage = MOTOR_IDENT_ACCELERATE;
             }
@@ -423,7 +427,8 @@ void J_B_Tf_Indent(motor_speed_t *speed, float iq_fdb,
 
         case MOTOR_IDENT_SETTLE_BEFORE_DECELERATE:
             speed->mechanical_rad_s_ref = MOTOR_IDENT_HIGH_SPEED_RAD_S;
-            if (motor_ident_settled(speed_rad_s, MOTOR_IDENT_HIGH_SPEED_RAD_S) != 0U)
+            if (motor_ident_settled(speed_rad_s, MOTOR_IDENT_HIGH_SPEED_RAD_S,
+                                    MOTOR_IDENT_SPEED_TOLERANCE_RAD_S) != 0U)
             {
                 motor_identification.stage = MOTOR_IDENT_DECELERATE;
             }

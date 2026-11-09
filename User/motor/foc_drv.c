@@ -2,6 +2,7 @@
 #include "pid.h"
 #include "encoder_zero_calibration.h"
 #include "B_J_Tf_Identification.h"
+#include "eccentricity_identification.h"
 
 #include <string.h>
 
@@ -195,7 +196,7 @@ void pmsm_motor_init(void)
     pm.motor.pn = 11U;
 		pm.motor.Kt = 1.5f * pm.motor.pn*pm.motor.phif;
     /* Defaults above are used only when no valid identified record exists. */
-    motor_identification_requested = FOC_MOTOR_IDENTIFICATION_ENABLE;
+    motor_identification_requested = FOC_J_B_Tf_IDENTIFICATION_ENABLE;
     motor_identification.flash_loaded = 0U;
     if (motor_parameters_flash_load(&pm.motor) == HAL_OK)
     {
@@ -203,7 +204,6 @@ void pmsm_motor_init(void)
         motor_identification.B = pm.motor.B;
         motor_identification.Tf = pm.motor.Tf;
         motor_identification.flash_loaded = 1U;
-        motor_identification_requested = 0U;
     }
 }
 
@@ -232,6 +232,7 @@ void pmsm_init(void)
 //#endif
     pmsm_board_init();
     pmsm_motor_init();
+    (void)eccentricity_compensation_flash_load();
     foc_current_pid_init();
     foc_speed_pid_init(&pm);
     foc_position_pid_init(&pm);
