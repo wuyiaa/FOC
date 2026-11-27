@@ -13,13 +13,141 @@
  * Keil Watch can edit the bandwidth and both parameter arrays at runtime.
  * Bandwidth changes recalculate Kp/Ki once; voltage/integral limits update each cycle.
  */
-volatile float FOC_CURRENT_LOOP_BANDWIDTH_DEFAULT_HZ = 500.0f;
+volatile float FOC_CURRENT_LOOP_BANDWIDTH_DEFAULT_HZ = 300.0f;
 static float applied_bandwidth_hz = -1.0f;
 
 pid_controller_t foc_id_pid;
 pid_controller_t foc_iq_pid;
 pid_controller_t foc_speed_pid;
 pid_controller_t foc_position_pid;
+
+ldq_identification_point_t ldq_identification_point_1;
+
+#if 0
+#if (Ldq_Identification != 0U)
+typedef struct
+{
+    float current_sin_lpf_a;
+    float current_cos_lpf_a;
+    float voltage_cos_lpf_v;
+    float voltage_sin_lpf_v;
+} ldq_hfi_axis_state_t;
+
+static float ldq_hfi_phase_rad;
+static ldq_hfi_axis_state_t ldq_hfi_d_state;
+static ldq_hfi_axis_state_t ldq_hfi_q_state;
+static uint32_t ldq_hfi_settle_sample_count;
+static uint32_t ldq_hfi_average_sample_count;
+static float ldq_hfi_ld_sum_h;
+static float ldq_hfi_lq_sum_h;
+
+static float ldq_hfi_axis_update(ldq_hfi_axis_state_t *state,
+                                 float current_feedback_a,
+                                 float voltage_axis_v,
+                                 float sin_phase,
+                                 float cos_phase,
+                                 float lpf_alpha,
+                                 float omega_h_rad_s)
+{
+    float current_amplitude_squared_a;
+
+    state->current_sin_lpf_a += lpf_alpha *
+        (2.0f * current_feedback_a * sin_phase - state->current_sin_lpf_a);
+    state->current_cos_lpf_a += lpf_alpha *
+        (2.0f * current_feedback_a * cos_phase - state->current_cos_lpf_a);
+    state->voltage_cos_lpf_v += lpf_alpha *
+        (2.0f * voltage_axis_v * cos_phase - state->voltage_cos_lpf_v);
+    state->voltage_sin_lpf_v += lpf_alpha *
+        (2.0f * voltage_axis_v * sin_phase - state->voltage_sin_lpf_v);
+
+    current_amplitude_squared_a =
+        state->current_sin_lpf_a * state->current_sin_lpf_a +
+        state->current_cos_lpf_a * state->current_cos_lpf_a;
+    if (current_amplitude_squared_a > 1.0e-12f)
+    {
+        return (state->voltage_cos_lpf_v * state->current_sin_lpf_a -
+                state->voltage_sin_lpf_v * state->current_cos_lpf_a) /
+            (omega_h_rad_s * current_amplitude_squared_a);
+    }
+
+    return 0.0f;
+}
+#endif
+#endif
+
+#if (Ldq_Identification != 0U)
+
+
+static uint32_t ldq_identification_wait_count;
+static uint32_t ldq_identification_capture_count;
+static float ldq_identification_sum_id_a;
+static float ldq_identification_sum_iq_a;
+static float ldq_identification_sum_omega_e_rad_s;
+static float ldq_identification_sum_ud_v;
+static float ldq_identification_sum_uq_v;
+
+static void ldq_identification_stage_reset(void)
+{
+    ldq_identification_wait_count = 0U;
+    ldq_identification_capture_count = 0U;
+    ldq_identification_sum_id_a = 0.0f;
+    ldq_identification_sum_iq_a = 0.0f;
+    ldq_identification_sum_omega_e_rad_s = 0.0f;
+    ldq_identification_sum_ud_v = 0.0f;
+    ldq_identification_sum_uq_v = 0.0f;
+}
+
+static void ldq_identification_capture_point(
+    ldq_identification_point_t *point, uint32_t sample_count)
+{
+    const float inverse_count = 1.0f / (float)sample_count;
+
+    point->id_a = ldq_identification_sum_id_a * inverse_count;
+    point->iq_a = ldq_identification_sum_iq_a * inverse_count;
+    point->omega_e_rad_s =
+        ldq_identification_sum_omega_e_rad_s * inverse_count;
+    point->ud_v = ldq_identification_sum_ud_v * inverse_count;
+    point->uq_v = ldq_identification_sum_uq_v * inverse_count;
+}
+
+static uint8_t ldq_identification_calculate(
+    pmsm_t *pm, const ldq_identification_point_t *p1,
+    const ldq_identification_point_t *p2)
+{
+    const float det_rs_lq =
+        p1->id_a * (-p2->omega_e_rad_s * p2->iq_a) -
+        p2->id_a * (-p1->omega_e_rad_s * p1->iq_a);
+    const float det_ld_phif = p1->omega_e_rad_s * p2->omega_e_rad_s *
+        (p1->id_a - p2->id_a);
+    float rs;
+    float lq;
+    float q1_residual;
+    float q2_residual;
+
+    if ((fabsf(det_rs_lq) <= 1.0e-9f) ||
+        (fabsf(det_ld_phif) <= 1.0e-6f))
+    {
+        return 0U;
+    }
+
+    rs = (p1->ud_v * (-p2->omega_e_rad_s * p2->iq_a) -
+          p2->ud_v * (-p1->omega_e_rad_s * p1->iq_a)) / det_rs_lq;
+    lq = (p1->id_a * p2->ud_v - p2->id_a * p1->ud_v) / det_rs_lq;
+
+    q1_residual = p1->uq_v - rs * p1->iq_a;
+    q2_residual = p2->uq_v - rs * p2->iq_a;
+
+    pm->motor.rs_identified_ohm = rs;
+    pm->motor.lq_identified_h = lq;
+    pm->motor.ld_identified_h =
+        (q1_residual * p2->omega_e_rad_s -
+         q2_residual * p1->omega_e_rad_s) / det_ld_phif;
+    pm->motor.phif_identified_wb =
+        (p1->omega_e_rad_s * p1->id_a * q2_residual -
+         p2->omega_e_rad_s * p2->id_a * q1_residual) / det_ld_phif;
+    return 1U;
+}
+#endif
 
 volatile float foc_id_pid_parameters[PID_PARAMETER_COUNT] =
 {
@@ -252,6 +380,16 @@ void foc_current_pid_init(void)
 void foc_current_pid_update(pmsm_t *pm, float dt, uint8_t feedforward_enable)
 {
     float omega_e;
+#if 0
+#if (Ldq_Identification != 0U)
+    float sin_phase;
+    float cos_phase;
+    float omega_h_rad_s;
+    float lpf_alpha;
+    float ld_raw_h;
+    float lq_raw_h;
+#endif
+#endif
 
     if ((pm == NULL) || (dt <= 0.0f))
     {
@@ -274,6 +412,36 @@ void foc_current_pid_update(pmsm_t *pm, float dt, uint8_t feedforward_enable)
 
     foc_current_pid_parameters_update();
 
+#if 0
+#if (Ldq_Identification != 0U)
+    omega_h_rad_s = TWO_PI * LDQ_HFI_FREQUENCY_HZ;
+    sin_phase = sinf(ldq_hfi_phase_rad);
+    cos_phase = cosf(ldq_hfi_phase_rad);
+    lpf_alpha = TWO_PI * LDQ_HFI_LPF_CUTOFF_HZ * dt;
+//    pm->foc.id_ref = LDQ_HFI_CURRENT_AMPLITUDE_A * sin_phase;
+//    pm->foc.iq_ref = LDQ_HFI_CURRENT_AMPLITUDE_A * sin_phase;
+#endif
+#endif
+
+#if (Ldq_Identification != 0U)
+    if (pm->motor.ldq_identification_stage == 0U)
+    {
+        pm->motor.ldq_identification_stage = 1U;
+        ldq_identification_stage_reset();
+    }
+
+    if (pm->motor.ldq_identification_stage == 1U)
+    {
+        pm->foc.id_ref = 0.0f;
+        pm->foc.iq_ref = 0.15f;//0.15
+    }
+    else if (pm->motor.ldq_identification_stage >= 2U)
+    {
+        pm->foc.id_ref = -0.1f;
+        pm->foc.iq_ref = 0.2f;
+    }
+#endif
+
     if (feedforward_enable != 0U)
     {
         /* Speed uses the physical direction convention; FF must follow theta_e.
@@ -290,6 +458,106 @@ void foc_current_pid_update(pmsm_t *pm, float dt, uint8_t feedforward_enable)
         pm->foc.Uq_ff = 0.0f;
     }
     pid_calculate_step(pm, dt);
+#if 0
+#if (Ldq_Identification != 0U)
+    ld_raw_h = ldq_hfi_axis_update(
+        &ldq_hfi_d_state, pm->foc.id_fdb, pm->foc.Ud_ref,
+        sin_phase, cos_phase, lpf_alpha, omega_h_rad_s);
+    lq_raw_h = ldq_hfi_axis_update(
+        &ldq_hfi_q_state, pm->foc.iq_fdb, pm->foc.Uq_ref,
+        sin_phase, cos_phase, lpf_alpha, omega_h_rad_s);
+
+    if (pm->motor.ldq_identification_average_done == 0U)
+    {
+        const uint32_t settle_samples =
+            (uint32_t)(LDQ_HFI_SETTLE_TIME_S / PWM_PERIOD_S);
+        const uint32_t average_samples =
+            (uint32_t)(LDQ_HFI_RESULT_AVERAGE_TIME_S / PWM_PERIOD_S);
+
+        if (ldq_hfi_settle_sample_count < settle_samples)
+        {
+            ldq_hfi_settle_sample_count++;
+            pm->motor.ld_identified_h = ld_raw_h;
+            pm->motor.lq_identified_h = lq_raw_h;
+        }
+        else
+        {
+            ldq_hfi_ld_sum_h += ld_raw_h;
+            ldq_hfi_lq_sum_h += lq_raw_h;
+            ldq_hfi_average_sample_count++;
+
+            pm->motor.ld_identified_h = ldq_hfi_ld_sum_h /
+                (float)ldq_hfi_average_sample_count;
+            pm->motor.lq_identified_h = ldq_hfi_lq_sum_h /
+                (float)ldq_hfi_average_sample_count;
+
+            if (ldq_hfi_average_sample_count >= average_samples)
+            {
+                pm->motor.ldq_identification_average_done = 1U;
+            }
+        }
+    }
+
+    ldq_hfi_phase_rad += omega_h_rad_s * dt;
+    if (ldq_hfi_phase_rad >= TWO_PI)
+    {
+        ldq_hfi_phase_rad -= TWO_PI;
+    }
+#endif
+#endif
+
+#if (Ldq_Identification != 0U)
+    if (pm->motor.ldq_identification_done == 0U)
+    {
+        const uint32_t settle_samples =
+            (uint32_t)(LDQ_IDENT_SETTLE_TIME_S / dt);
+        const uint32_t capture_samples =
+            (uint32_t)(LDQ_IDENT_CAPTURE_TIME_S / dt);
+
+        if (ldq_identification_wait_count < settle_samples)
+        {
+            ldq_identification_wait_count++;
+        }
+        else
+        {
+            const float omega_ident_rad_s = pm->speed.electrical_rad_s *
+                (float)calibration.electrical_direction /
+                MOTOR_SPEED_DIRECTION;
+
+            ldq_identification_sum_id_a += pm->foc.id_fdb;
+            ldq_identification_sum_iq_a += pm->foc.iq_fdb;
+            ldq_identification_sum_omega_e_rad_s += omega_ident_rad_s;
+            ldq_identification_sum_ud_v += pm->foc.Ud_ref;
+            ldq_identification_sum_uq_v += pm->foc.Uq_ref;
+            ldq_identification_capture_count++;
+
+            if (ldq_identification_capture_count >= capture_samples)
+            {
+                if (pm->motor.ldq_identification_stage == 1U)
+                {
+                    ldq_identification_capture_point(
+                        &ldq_identification_point_1,
+                        ldq_identification_capture_count);
+                    pm->motor.ldq_identification_stage = 2U;
+                    ldq_identification_stage_reset();
+                }
+                else
+                {
+                    ldq_identification_point_t point_2;
+
+                    ldq_identification_capture_point(
+                        &point_2, ldq_identification_capture_count);
+                    if (ldq_identification_calculate(
+                            pm, &ldq_identification_point_1, &point_2) != 0U)
+                    {
+                        pm->motor.ldq_identification_stage = 3U;
+                        pm->motor.ldq_identification_done = 1U;
+                    }
+                }
+            }
+        }
+    }
+#endif
 }
 //float spd_p;
 //float spd_i;

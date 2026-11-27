@@ -51,27 +51,43 @@ void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef *hadc)
         foc_current_calc(&pm);
         
 				(void)as5047p_read_blocking(&pm.encoder, &pm.encoder_foc_sample);
-#if ((FOC_VF != 0U) && (FOC_ENCODER_ZERO_CALIBRATION_MODE == 0U) && \
-     (FOC_PHASE_AUTO_CALIBRATION_MODE == 0U))
-        foc_VF(&pm);
-#endif
+				#if ((FOC_VF != 0U) && (FOC_ENCODER_ZERO_CALIBRATION_MODE == 0U) && \
+						 (FOC_PHASE_AUTO_CALIBRATION_MODE == 0U))
+								foc_VF(&pm);
+				#endif
 				foc_electrical_angle_update(&pm);
 				
 //				pm.foc.id_fdb_filtered  += ID_FILTER_ALPHA * (pm.foc.id_fdb - pm.foc.id_fdb_filtered);
 //				pm.foc.iq_fdb_filtered  += ID_FILTER_ALPHA * (pm.foc.iq_fdb - pm.foc.iq_fdb_filtered);
 //				pm.foc.Is_filtered = sqrtf(pm.foc.id_fdb_filtered*pm.foc.id_fdb_filtered + pm.foc.iq_fdb_filtered*pm.foc.iq_fdb_filtered);
-#if ((FOC_ENCODER_ZERO_CALIBRATION_MODE == 0U) && \
-     (FOC_PHASE_AUTO_CALIBRATION_MODE == 0U) && \
-     (FOC_ECCENTRICITY_IDENTIFICATION_ENABLE == 0U))
-#if (FOC_VF == 0U)
+				#if ((FOC_ENCODER_ZERO_CALIBRATION_MODE == 0U) && \
+						 (FOC_PHASE_AUTO_CALIBRATION_MODE == 0U) && \
+						 (FOC_ECCENTRICITY_IDENTIFICATION_ENABLE == 0U))
+				#if (FOC_VF == 0U)
 				pm.foc.id_ref = 0.0f;
-        pm.foc.iq_ref = foc_speed_pid.output +	(pm.speed.observer_torque_3th.load_torque_nm_hat/pm.motor.Kt);//foc_speed_pid.output;  0.042
-											
+				#if (Contorl_Mode == Three_loop_control)
+								pm.foc.iq_ref = foc_speed_pid.output +	(pm.speed.observer_torque_3th.load_torque_nm_hat/pm.motor.Kt);//foc_speed_pid.output;  0.042
+//								pm.foc.iq_ref = 0;
 #endif
-        foc_current_pid_update(&pm, PWM_PERIOD_S, 0U);
-#endif
+															
+				#endif
+				#if (Contorl_Mode == MIT_control)
+        pm.foc.iq_ref = Mit_position_control_current_ref(&pm);
+				/*测电流环带宽*/
+//				static float phase = 0.0f;
+
+//				phase += TWO_PI * 1000.0f * PWM_PERIOD_S;
+//				if (phase >= TWO_PI)
+//				{
+//						phase -= TWO_PI;
+//				}
+
+//				pm.foc.iq_ref = 0.2f * sinf(phase);
+				#endif
+								foc_current_pid_update(&pm, PWM_PERIOD_S, 0U);
+				#endif
 				
-//pm.foc.Ud_ref_filtered += ID_FILTER_ALPHA * (pm.foc.Ud_ref - pm.foc.Ud_ref_filtered);
+//			   pm.foc.Ud_ref_filtered += ID_FILTER_ALPHA * (pm.foc.Ud_ref - pm.foc.Ud_ref_filtered);
 //				 pm.foc.Ud_ref = 0.0f;//2.0f
 //				 pm.foc.Uq_ref = 13.0f;//13.163f
         foc_voltage_calc(&pm, voltage_sample.vbus_v, pm.svpwm.vref2_min);//voltage_sample.vbus_v pm.svpwm.vref2_min
@@ -95,6 +111,9 @@ void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
 }
 //float wc_l;//500
 /* TIM7: speed updates at 2 kHz; TIM3: position updates at 1 kHz. */
+//float wcccccc = 5.0f;
+//float AAAAAAAA = 2.0f;
+//float phase = 0.0f;
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
     if (htim->Instance == TIM7)
@@ -128,8 +147,11 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         /* Match the position-angle direction to the speed convention. */
 				
 				//如果反馈使用低通和二阶就要注意方向了
-#if (FOC_J_B_Tf_IDENTIFICATION_ENABLE == 0U)
-        pm.speed.mechanical_rad_s_ref = 20.0f;//foc_position_pid.output;	
+#if ((FOC_J_B_Tf_IDENTIFICATION_ENABLE == 0U) && \
+     (Contorl_Mode == Three_loop_control))
+        pm.speed.mechanical_rad_s_ref = foc_position_pid.output;//+AAAAAAAA *  wcccccc*cosf(phase);	
+//			pm.pos.mechanical_angle_deg_ref = ;
+
 //						 foc_position_pid.output * MOTOR_SPEED_DIRECTION * (float)calibration.electrical_direction;
 				
 #endif
@@ -162,20 +184,35 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         }
 #endif
 
+#if ((Contorl_Mode == Three_loop_control) || \
+     (FOC_J_B_Tf_IDENTIFICATION_ENABLE != 0U))
         foc_speed_pid_update(&pm, MOTOR_SPEED_UPDATE_PERIOD_S);
+#endif
 				
 #endif
     }
     else if (htim->Instance == TIM3)
     {
-			pm.pos.mechanical_angle_deg_ref = 30.2f;
+				
+
+//				phase += TWO_PI * wcccccc * PWM_PERIOD_S;
+//				if (phase >= TWO_PI)
+//				{
+//						phase -= TWO_PI;
+//				}
+
+			pm.pos.mechanical_angle_deg_ref = 30.0f;//AAAAAAAA * sinf(phase)+180.0f;
 			motor_pos_update();
 			
 #if ((FOC_ENCODER_ZERO_CALIBRATION_MODE == 0U) && \
      (FOC_PHASE_AUTO_CALIBRATION_MODE == 0U) && (FOC_VF == 0U) && \
      (FOC_ECCENTRICITY_IDENTIFICATION_ENABLE == 0U) && \
      (FOC_J_B_Tf_IDENTIFICATION_ENABLE == 0U))
+#if (Contorl_Mode == MIT_control)
+        motor_pos_mit_reference_update(MOTOR_POS_UPDATE_PERIOD_S);
+#else
         foc_position_pid_update(&pm, MOTOR_POS_UPDATE_PERIOD_S);
+#endif
 #endif
     }
 }

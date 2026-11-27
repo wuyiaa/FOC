@@ -67,6 +67,9 @@ static uint8_t vofa_send_time_valid;
 //extern float sinf_e;
 //extern float cosf_e;
 extern float theta_e;
+//extern    float kp;
+//extern    float kd;
+
 
 static void vofa_send_time_update(void)
 {
@@ -135,6 +138,32 @@ static uint16_t vofa_packet_build(void)
     {
 /*********************************************控制器*********************************************************/
 
+					/*MIT*/
+//			kp,
+//			kd,
+//			pm.speed.observer_torque_3th.mechanical_rad_s_hat,
+//			pm.pos.mechanical_angle_rad_ref_speed,
+////			kd * (pm.pos.mechanical_angle_rad_ref_speed -
+////                   1.0f *
+////                   pm.speed.mechanical_rad_s_filtered),
+////			kp * (pm.pos.mechanical_angle_rad_ref -
+////                  pm.foc.mechanical_angle_rad),
+//			pm.speed.mechanical_rad_s_filtered,
+//			pm.pos.mechanical_angle_rad_ref_speed,
+			
+			
+//			pm.motor.ld_identified_h,
+//			pm.motor.lq_identified_h,
+//			pm.motor.ld,
+//			pm.motor.lq,
+			
+//			 pm.motor.rs_identified_ohm,
+//			 pm.motor.ld_identified_h,
+//			 pm.motor.lq_identified_h,
+//			 pm.motor.phif_identified_wb,
+//			 ldq_identification_point_1.omega_e_rad_s,
+//			 ldq_identification_point_1.iq_a,
+//			 ldq_identification_point_1.ud_v,
 //				/*电机电流环*/
 //				pm.foc.iq_ref,
 //				pm.foc.iq_fdb,	
@@ -156,8 +185,8 @@ static uint16_t vofa_packet_build(void)
 //												
 								
 //			/*电机位置环*/
-//			pm.pos.mechanical_angle_deg_ref,
-//			pm.pos.mechanical_angle_deg_fdb,
+			pm.pos.mechanical_angle_deg_ref,
+			pm.pos.mechanical_angle_deg_fdb,
 //			pm.pos.mechanical_angle_rad_ref,
 //			pm.pos.mechanical_angle_rad_fdb,
 //			theta_e,
@@ -180,12 +209,12 @@ static uint16_t vofa_packet_build(void)
 
 			/*电机角速度*/
 //			pm.speed.mechanical_rad_s,   /* CH4: mechanical speed (rad/s) */
-			pm.speed.mechanical_rad_s_filtered,
+//			pm.speed.mechanical_rad_s_filtered,
 //			pm.speed.observer_2nd.mechanical_rad_s_hat,
 //			pm.speed.observer_3th.mechanical_rad_s_hat,
 //			pm.speed.observer_torque_3th.mechanical_rad_s_hat,
 //			pm.speed.observer_torque_3th.load_torque_nm_hat,
-			pm.speed.mechanical_rad_s_ref,
+//			pm.speed.mechanical_rad_s_ref,
 
 //				pm.speed.observer_3th.mechanical_angle_rad_hat,
 						
@@ -230,8 +259,8 @@ static uint16_t vofa_packet_build(void)
 //				(float)eccentricity_measure.done,                 /* CH7: 完成标志:0=采集或计算中，1=完成并回放 */
 //				pm.speed.mechanical_rad_s_fdb,										/* CH8*/
 
-				eccentricity_compensation.mechanical_angle_deg_before, //偏心补偿前	/* CH9*/
-				eccentricity_compensation.mechanical_angle_deg_after,	 //偏心补偿后	/* CH10*/
+//				eccentricity_compensation.mechanical_angle_deg_before, //偏心补偿前	/* CH9*/
+//				eccentricity_compensation.mechanical_angle_deg_after,	 //偏心补偿后	/* CH10*/
 //				eccentricity_compensation.correction_deg, 			//补偿表						/* CH11*/
 //				(float)eccentricity_compensation.ready,					//表准备完成标志		/* CH12*/
 //					(float)eccentricity_compensation.flash_saved, 	//Flash 保存成功标志 不太准 建议看下一个/* CH13*/

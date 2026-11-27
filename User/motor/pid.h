@@ -23,10 +23,20 @@ typedef struct
     volatile float output; /* Published between the position, speed and current loops. */
 } pid_controller_t;
 
+typedef struct
+{
+    float id_a;
+    float iq_a;
+    float omega_e_rad_s;
+    float ud_v;
+    float uq_v;
+} ldq_identification_point_t;
+
 extern pid_controller_t foc_id_pid;
 extern pid_controller_t foc_iq_pid;
 extern pid_controller_t foc_speed_pid;
 extern pid_controller_t foc_position_pid;
+extern ldq_identification_point_t ldq_identification_point_1;
 /* Keil Watch: [0] Kp, [1] Ki, [2] Kd, [3..5] limits/deadband.
  * [3] is the shared voltage-circle radius: measured VBUS * fixed margin / sqrt(3).
  * [3] and [4] are refreshed from measured VBUS each cycle.

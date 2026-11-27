@@ -186,6 +186,13 @@ void pmsm_motor_init(void)
     /* Motor parameters use SI units: H, Ohm and pole pairs. */
     pm.motor.lq = 0.002849f;
     pm.motor.ld = 0.001423f;
+    pm.motor.lq_identified_h = 0.0f;
+    pm.motor.ld_identified_h = 0.0f;
+    pm.motor.ldq_identification_average_done = 0U;
+    pm.motor.rs_identified_ohm = 0.0f;
+    pm.motor.phif_identified_wb = 0.0f;
+    pm.motor.ldq_identification_stage = 0U;
+    pm.motor.ldq_identification_done = 0U;
     pm.motor.rs = 6.617f;
     pm.motor.phif = 0.014f;
     pm.motor.J = 0.000018f;//0.008 0.0396f  0.000238  0.0014562

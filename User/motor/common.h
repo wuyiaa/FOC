@@ -11,6 +11,19 @@
 #include "motor_config.h"
 
 /* Set to 1U to enable three-phase PWM automatically after initialization. */
+#define MIT_control                         0U
+#define Three_loop_control                  1U
+#define Contorl_Mode                        MIT_control
+
+#define Ldq_Identification                  0U
+#define LDQ_HFI_CURRENT_AMPLITUDE_A         0.1f
+#define LDQ_HFI_FREQUENCY_HZ                200.0f
+#define LDQ_HFI_LPF_CUTOFF_HZ               20.0f
+#define LDQ_HFI_SETTLE_TIME_S               0.5f
+#define LDQ_HFI_RESULT_AVERAGE_TIME_S       1.0f
+#define LDQ_IDENT_SETTLE_TIME_S              1.0f
+#define LDQ_IDENT_CAPTURE_TIME_S             0.5f
+
 #ifndef FOC_PWM_OUTPUT_DEFAULT_ENABLED
 #define FOC_PWM_OUTPUT_DEFAULT_ENABLED       0U
 #endif
@@ -36,7 +49,16 @@
 #endif
 
 #ifndef FOC_VF
+#if (Ldq_Identification != 0U)
 #define FOC_VF                              0U
+#else
+#define FOC_VF                              0U
+#endif
+#endif
+
+#if ((Contorl_Mode != MIT_control) && \
+     (Contorl_Mode != Three_loop_control))
+#error "Select MIT_control or Three_loop_control in Contorl_Mode"
 #endif
 
 #define ENCODER_ZERO_ALIGN_TIME_S            1U
@@ -62,7 +84,9 @@
       (FOC_PHASE_AUTO_CALIBRATION_MODE != 0U) + \
       (FOC_J_B_Tf_IDENTIFICATION_ENABLE != 0U) + \
       (FOC_ECCENTRICITY_IDENTIFICATION_ENABLE != 0U) + \
-      (FOC_VF != 0U)) > 1)
+      ((FOC_VF != 0U) && (Ldq_Identification == 0U)) + \
+      (Ldq_Identification != 0U) + \
+      (Contorl_Mode == MIT_control)) > 1)
 #error "Select only one calibration, identification or VF mode"
 #endif
 
@@ -120,6 +144,13 @@ typedef struct
 {
     float lq;
     float ld;
+    float lq_identified_h;
+    float ld_identified_h;
+    uint8_t ldq_identification_average_done;
+    float rs_identified_ohm;
+    float phif_identified_wb;
+    uint8_t ldq_identification_stage;
+    uint8_t ldq_identification_done;
     float rs;
     float phif; /* Permanent-magnet flux linkage, Wb. */
     float J;      /* Rotor and load inertia referred to the motor. */
@@ -309,6 +340,7 @@ extern foc_open_loop_angle_measure_t foc_open_loop_angle_measure;
 
 extern pmsm_t pm;
 
+float Mit_position_control_current_ref(const pmsm_t *pm);
 void pmsm_board_init(void);
 void pmsm_motor_init(void);
 void pmsm_init(void);
